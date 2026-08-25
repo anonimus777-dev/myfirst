@@ -705,91 +705,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text.startswith("рулетка"):
         parts_g = raw.split()
         if len(parts_g) < 3:
-            await update.message.reply_text(f"Пример: <code>Рулетка [число/красное/чётное/1-12] [ставка]</code>", parse_mode=ParseMode.HTML)
-            return
-        bet_type = parts_g[1].lower()
-        bet = parse_bet(parts_g[2], user["balance"])
-        if bet <= 0 or user["balance"] < bet:
-            await update.message.reply_text(f"{user_link(uid, user['username'])}, недостаточно крышек!", parse_mode=ParseMode.HTML)
-            return
-        num = random.randint(0, 36)
-        red_nums = {1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36}
-        win = 0
-        if bet_type.isdigit() and int(bet_type) == num:
-            win = bet * 35
-            desc = f"🎯 Число {num}! Выигрыш x35!"
-        elif bet_type in ("красное", "red") and num in red_nums:
-            win = bet * 2
-            desc = f"🔴 Красное! Число {num}. x2"
-        elif bet_type in ("чёрное", "black") and num not in red_nums and num != 0:
-            win = bet * 2
-            desc = f"⚫️ Чёрное! Число {num}. x2"
-        elif bet_type in ("чётное", "even") and num % 2 == 0 and num != 0:
-            win = bet * 2
-            desc = f"✅ Чётное! Число {num}. x2"
-        elif bet_type in ("нечётное", "odd") and num % 2 == 1:
-            win = bet * 2
-            desc = f"✅ Нечётное! Число {num}. x2"
-        elif bet_type == "1-12" and 1 <= num <= 12:
-            win = bet * 3
-            desc = f"✅ 1-12! Число {num}. x3"
-        elif bet_type == "13-24" and 13 <= num <= 24:
-            win = bet * 3
-            desc = f"✅ 13-24! Число {num}. x3"
-        elif bet_type == "25-36" and 25 <= num <= 36:
-            win = bet * 3
-            desc = f"✅ 25-36! Число {num}. x3"
-        else:
-            desc = f"❌ Проигрыш. Выпало {num}."
-        change = win - bet
-        async with aiosqlite.connect(DB_PATH) as db:
-            await db.execute("UPDATE users SET balance = balance - ? + ? WHERE user_id=?", (bet, win, uid))
-            await db.commit()
-        sign = "+" if change >= 0 else ""
-        await update.message.reply_text(
-            f"🎮 {user_link(uid, user['username'])}\n"
-            f"🎡 Шарик: {num}\n"
-            f"💸 Ставка: {fmt_smart(bet)} кр.\n"
-            f"{desc}\n"
-            f"📊 Итог: {sign}{fmt_smart(change)} кр.",
-            parse_mode=ParseMode.HTML
-        )
+            color = "🟢" if num == 0 else ("🔴" if num in red_nums else "⚫️")
+        result_text = f"✅ Твой выигрыш составил <b>{fmt_smart(change)}</b> кр.!" if change > 0 else "🛑 Ты проиграл(-а)! Попытай удачу в следующий раз 😣"
+        await update.message.reply_text(f"{user_link(uid, user['username'])}\n🖲 Выпало - {num} {color}\n{result_text}", parse_mode=ParseMode.HTML)
         return
 
     # Кубик
     if text.startswith("кубик"):
         parts_g = raw.split()
         if len(parts_g) < 3 or not parts_g[1].isdigit():
-            await update.message.reply_text(f"Пример: <code>Кубик [число 1-6] [ставка]</code>", parse_mode=ParseMode.HTML)
-            return
-        guess = int(parts_g[1])
-        bet = parse_bet(parts_g[2], user["balance"])
-        if guess < 1 or guess > 6:
-            await update.message.reply_text("Число от 1 до 6!", parse_mode=ParseMode.HTML)
-            return
-        if bet <= 0 or user["balance"] < bet:
-            await update.message.reply_text(f"{user_link(uid, user['username'])}, недостаточно крышек!", parse_mode=ParseMode.HTML)
-            return
-        rolled = random.randint(1, 6)
-        dice_emojis = {1:"1️⃣",2:"2️⃣",3:"3️⃣",4:"4️⃣",5:"5️⃣",6:"6️⃣"}
-        if rolled == guess:
-            win = bet * 5
-            desc = f"🎯 Угадал! Выпало {dice_emojis[rolled]}. x5"
-        else:
-            win = 0
-            desc = f"❌ Не угадал. Выпало {dice_emojis[rolled]}."
-        change = win - bet
-        async with aiosqlite.connect(DB_PATH) as db:
-            await db.execute("UPDATE users SET balance = balance - ? + ? WHERE user_id=?", (bet, win, uid))
-            await db.commit()
-        sign = "+" if change >= 0 else ""
-        await update.message.reply_text(
-            f"🎲 {user_link(uid, user['username'])}\n"
-            f"💸 Ставка: {fmt_smart(bet)} кр. на {dice_emojis[guess]}\n"
-            f"{desc}\n"
-            f"📊 Итог: {sign}{fmt_smart(change)} кр.",
-            parse_mode=ParseMode.HTML
-        )
+            result_text = f"✅ Твой выигрыш составил <b>{fmt_smart(win)}</b> кр.!" if win > 0 else "🛑 Ты проиграл(-а)! Попытай удачу в следующий раз 😣"
+        await update.message.reply_text(f"{user_link(uid, user['username'])}\n🎲 Выпало - {rolled}\n{result_text}", parse_mode=ParseMode.HTML)
         return
 
     # Стаканчик
