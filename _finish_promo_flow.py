@@ -1,0 +1,8 @@
+from pathlib import Path
+p=Path('бот.py')
+s=p.read_text(encoding='utf-8')
+needle='''        parts = raw.split()\n        if parts[0].lower() == "выдать"'''
+insert='''        parts = raw.split()\n\n        selected_reward_t = context.user_data.get("admin_promo_reward_type")\n        if selected_reward_t and parts and parts[0].lower() != "добпромо":\n            if len(parts) < 2:\n                await update.message.reply_text("Формат: <code>код сумма [использований]</code>", parse_mode=ParseMode.HTML)\n                return\n            promo_code_new = parts[0].lower()\n            try:\n                reward_a = int(parts[1])\n                uses = int(parts[2]) if len(parts) >= 3 else 1\n            except ValueError:\n                await update.message.reply_text("Сумма и количество использований должны быть числами.")\n                return\n            if reward_a <= 0 or uses <= 0:\n                await update.message.reply_text("Сумма и количество использований должны быть больше нуля.")\n                return\n            PROMO_CODES[promo_code_new] = {"reward_type": selected_reward_t, "amount": reward_a, "uses_left": uses}\n            context.user_data.pop("admin_promo_reward_type", None)\n            await update.message.reply_text(\n                f"✅ Промокод '{promo_code_new}' добавлен: {selected_reward_t} ×{reward_a}.\\n"\n                f"👥 Использований: {uses} (один пользователь — только 1 раз).",\n                parse_mode=ParseMode.HTML\n            )\n            return\n\n        if parts[0].lower() == "выдать"'''
+if needle not in s: raise SystemExit('admin insertion marker not found')
+s=s.replace(needle,insert,1)
+p.write_text(s,encoding='utf-8')
