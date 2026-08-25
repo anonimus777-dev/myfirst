@@ -12,7 +12,7 @@ from вспомогательные.вспомогательные_функци�
 )
 from вспомогательные.проверки import require_bunker
 from база_данных.база import get_user, get_total_income, get_rooms
-from клавиатуры.общее import donate_keyboard, back_keyboard
+from клавиатуры.общие import donate_keyboard, back_keyboard
 
 
 async def handle_balance(update: Update, user: dict):

@@ -8,7 +8,7 @@ from вспомогательные.вспомогательные_функци�
 from вспомогательные.проверки import require_bunker
 from вспомогательные.сообщения import build_bunker_text, build_top_text
 from база_данных.база import get_user, create_bunker
-from клавиатуры.общее import no_bunker_keyboard, back_keyboard
+from клавиатуры.общие import no_bunker_keyboard, back_keyboard
 from клавиатуры.главное_меню import help_main_keyboard
 from клавиатуры.бункер import top_keyboard
 

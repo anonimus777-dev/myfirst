@@ -44,7 +44,7 @@ from база_данных.шахта import (
     handle_dig, handle_buy_pickaxe, handle_sell_mine_resource,
     get_mine, DIG_PENDING,
 )
-from клавиатуры.общее import no_bunker_keyboard, back_keyboard, donate_keyboard
+from клавиатуры.общие import no_bunker_keyboard, back_keyboard, donate_keyboard
 from клавиатуры.главное_меню import help_main_keyboard
 from клавиатуры.бункер import room_keyboard, top_keyboard
 from клавиатуры.активности import handle_rp_list, handle_rp_action
