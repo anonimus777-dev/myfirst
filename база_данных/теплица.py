@@ -43,7 +43,6 @@ async def handle_my_greenhouse(update: Update, user: dict):
     if selected not in available:
         selected = "картошка"
 
-    # Склад
     stock_lines = []
     for crop, data in CROPS.items():
         amount = gh.get(data["col"], 0)
@@ -147,11 +146,15 @@ async def handle_grow(update: Update, user: dict, parts_raw: list):
     water_limit = get_vip_water_limit(vip)
     water = gh["water"]
     if water < qty:
-        message = f"{user_link(uid, username)}, у тебя недостаточно воды!"
+        # CallbackQuery.answer() does not parse HTML. Use plain username here.
+        message = f"🙎‍♂️ {username}, у тебя недостаточно воды!"
         if update.callback_query:
             await update.callback_query.answer(message, show_alert=False)
         else:
-            await update.effective_message.reply_text(message, parse_mode=ParseMode.HTML)
+            await update.effective_message.reply_text(
+                f"🙎‍♂️ {user_link(uid, username)}, у тебя недостаточно воды!",
+                parse_mode=ParseMode.HTML
+            )
         return
 
     total_crop = 0
@@ -171,7 +174,7 @@ async def handle_grow(update: Update, user: dict, parts_raw: list):
     gh = await get_greenhouse(uid)
     water_left = gh["water"]
     message = (
-        f"{user_link(uid, username)}, успешно выращено: {total_crop} {crop_data['emoji']}, "
+        f"{username}, успешно выращено: {total_crop} {crop_data['emoji']}, "
         f"+{total_exp} опыта, -{qty} 💧"
     )
     if update.callback_query:
