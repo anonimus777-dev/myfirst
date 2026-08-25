@@ -1,0 +1,30 @@
+name: fix-syntax
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fix broken f-string
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('база_данных/пользователи.py')
+          s=p.read_text(encoding='utf-8')
+          bad='await update.message.reply_text(f"{user_link(uid, username)}, тебе начислено:\n{reward_text}\n\n🧡 Приятной игры! 🧡", parse_mode=ParseMode.HTML)'
+          good='await update.message.reply_text(f"{user_link(uid, username)}, тебе начислено:\\n{reward_text}\\n\\n🧡 Приятной игры! 🧡", parse_mode=ParseMode.HTML)'
+          if bad not in s:
+              raise SystemExit('target string not found')
+          p.write_text(s.replace(bad,good,1),encoding='utf-8')
+          PY
+          python3 -m py_compile 'бот.py' 'база_данных/пользователи.py'
+          SHA=$(gh api repos/${{ github.repository }}/contents/'база_данных/пользователи.py' --jq .sha)
+          CONTENT=$(base64 -w0 'база_данных/пользователи.py')
+          gh api --method PUT repos/${{ github.repository }}/contents/'база_данных/пользователи.py' -f message='fix: repair broken promo f-string' -f content="$CONTENT" -f sha="$SHA" -f branch='main'
