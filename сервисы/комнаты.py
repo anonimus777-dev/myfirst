@@ -1,88 +1,120 @@
-"""Расчёты и транзакции для комнат бункера."""
-
-import random
+# -*- coding: utf-8 -*-
 import aiosqlite
-
-from настройки import DB_PATH
-
-ROOMS_DATA = {
-    1: ("Теплица", 80, 1, 2.5, 0), 2: ("Генераторная", 80, 1, 2.5, 0),
-    3: ("Столовая", 80, 1, 2.5, 0), 4: ("Станция обработки воды", 80, 1, 2.5, 0),
-    5: ("Сейф", 151, 1, 3.0, 5), 6: ("Игровая комната", 202, 2, 3.0, 12),
-    7: ("Медпункт", 300, 3, 3.0, 24), 8: ("Радиостанция", 505, 5, 3.0, 40),
-    9: ("Оружейная", 808, 8, 3.0, 80), 10: ("Кухня", 1515, 15, 3.0, 130),
-    11: ("Гостиная", 2323, 23, 3.0, 220), 12: ("Шахта", 3434, 34, 3.0, 360),
-    13: ("Лаборатория", 5000, 50, 3.0, 500), 14: ("Сад", 7570, 70, 3.0, 720),
-    15: ("Автомастерская", 10100, 100, 3.0, 1000), 16: ("Гильдия", 18180, 180, 3.0, 1400),
-    17: ("Киберспортивная", 30300, 300, 3.0, 2000), 18: ("Адронный коллайдер", 101000, 1000, 3.0, 3500),
-    19: ("Реактор", 202000, 2000, 3.0, 5000),
-}
-ROOM_BUY_PRICES = {room_num: 150 * 2 ** (room_num - 5) for room_num in range(5, 20)}
+from telegram import Update
+from telegram.ext import ContextTypes
+from telegram.constants import ParseMode
+from настройки import ROOMS_DATA, ROOM_BUY_PRICES, DB_PATH, NUM_EMOJIS
+from вспомогательные.вспомогательные_функции import fmt_smart, user_link
+from вспомогательные.проверки import require_bunker, has_room
+from вспомогательные.сообщения import build_room_text
+from база_данных.база import get_user, get_rooms, get_room_level
+from база_данных.бункер import do_room_upgrade
+from клавиатуры.бункер import room_keyboard
 
 
-def room_name(room_num: int) -> str:
-    return ROOMS_DATA[room_num][0]
+async def cmd_room(update: Update, context: ContextTypes.DEFAULT_TYPE, room_num: int = None):
+    if not await require_bunker(update):
+        return
+    uid = update.effective_user.id
+    user = await get_user(uid)
+    vip = user.get("vip", 0)
+    if room_num is None:
+        await update.message.reply_text("Укажите номер комнаты, например: К 1")
+        return
+    if not await has_room(uid, room_num):
+        await update.message.reply_text(f"{user_link(uid, user['username'])}, у тебя нет данной комнаты.\nТы можешь её купить командой: Купить комнату [номер комнаты].", parse_mode=ParseMode.HTML)
+        return
+    context.user_data[f"room_{room_num}_bottles"] = False
+    text = await build_room_text(uid, room_num, use_bottles=False)
+    if text:
+        await update.message.reply_text(text, reply_markup=room_keyboard(room_num, use_bottles=False, vip=vip), parse_mode=ParseMode.HTML)
 
+async def cmd_rooms_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await require_bunker(update):
+        return
+    uid = update.effective_user.id
+    user = await get_user(uid)
+    username = user["username"] or "Игрок"
+    unlock = [
+        (1, "со старта"), (2, "со старта"), (3, "со старта"), (4, "со старта"),
+        (5, "от 5 🧍"), (6, "от 12 🧍"), (7, "от 24 🧍"), (8, "от 40 🧍"),
+        (9, "от 80 🧍"), (10, "от 130 🧍"), (11, "от 220 🧍"), (12, "от 360 🧍"),
+        (13, "от 500 🧍"), (14, "от 720 🧍"), (15, "от 1000 🧍"),
+        (16, "от 1400 🧍"), (17, "от 2000 🧍"), (18, "от 3500 🧍"), (19, "от 5000 🧍"),
+    ]
+    lines = [f"🙎‍♂️ {user_link(user['user_id'], user['username'])}\n"]
+    for rn, cond in unlock:
+        emoji = NUM_EMOJIS.get(rn, f"{rn}.")
+        lines.append(f"{emoji} {ROOMS_DATA[rn]['name']} - {cond}")
+    lines.append("\nℹ️ Купить комнату можно командой - Купить комнату [номер]")
+    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
 
-def get_current_income(room_num: int, level: int) -> int:
-    _, base, increment, _, _ = ROOMS_DATA[room_num]
-    return base + increment * (level - 1)
-
-
-def get_upgrade_cost(room_num: int, current_level: int) -> int:
-    return int(get_current_income(room_num, current_level) * ROOMS_DATA[room_num][3])
-
-
-def get_balance_limit(rooms: list[dict]) -> int:
-    return 10_000 + sum(room["level"] * 1000 for room in rooms if room["room_num"] == 5)
-
-
-async def buy_room(user_id: int, room_num: int) -> tuple[bool, str]:
-    if room_num not in ROOM_BUY_PRICES:
-        return False, "Можно купить комнаты с 5 по 19."
+async def cmd_let_in(update: Update, context: ContextTypes.DEFAULT_TYPE, amount: int = None):
+    if not await require_bunker(update):
+        return
+    uid = update.effective_user.id
+    user = await get_user(uid)
+    username = user["username"] or "Игрок"
+    queue = user["queue"]
+    if amount is None or amount <= 0:
+        await update.message.reply_text(f"{user_link(uid, username)}, этой командой можно впустить людей в бункер!\nСледите за уровнями комнат!\n\nПример: Впустить [кол-во человек]", parse_mode=ParseMode.HTML)
+        return
+    if amount > queue:
+        await update.message.reply_text(f"{user_link(uid, username)}, недостаточно людей, в очереди: {queue} чел.", parse_mode=ParseMode.HTML)
+        return
     async with aiosqlite.connect(DB_PATH) as db:
-        async with db.execute("SELECT balance, people FROM users WHERE user_id = ?", (user_id,)) as cur:
-            user = await cur.fetchone()
-        async with db.execute("SELECT 1 FROM rooms WHERE user_id = ? AND room_num = ?", (user_id, room_num)) as cur:
-            if await cur.fetchone():
-                return False, "Эта комната уже куплена."
-        price = ROOM_BUY_PRICES[room_num]
-        if user[1] < ROOMS_DATA[room_num][4]:
-            return False, "Недостаточно людей в бункере."
-        if user[0] < price:
-            return False, "Недостаточно крышек."
-        await db.execute("UPDATE users SET balance = balance - ? WHERE user_id = ?", (price, user_id))
-        await db.execute("INSERT INTO rooms (user_id, room_num, level) VALUES (?, ?, 1)", (user_id, room_num))
+        await db.execute(
+            "UPDATE users SET people = people + ?, queue = queue - ? WHERE user_id = ?",
+            (amount, amount, uid)
+        )
         await db.commit()
-    return True, room_name(room_num)
+    user = await get_user(uid)
+    await update.message.reply_text(
+        f"{user_link(uid, username)}, ты впустил(-а) {amount} человек(а) в бункер!"
+    , parse_mode=ParseMode.HTML)
 
+async def cmd_buy_room(update: Update, context: ContextTypes.DEFAULT_TYPE, room_num: int = None):
+    if not await require_bunker(update):
+        return
+    uid = update.effective_user.id
+    user = await get_user(uid)
+    username = user["username"] or "Игрок"
+    rooms = await get_rooms(uid)
+    owned = {r["room_num"] for r in rooms}
 
-async def upgrade_room(user_id: int, room_num: int, levels: int, use_bottles: bool) -> tuple[bool, int, bool]:
-    if levels not in (1, 5, 20, 100, 1000, 5000):
-        return False, 0, False
+    if room_num is None:
+        await update.message.reply_text(f"{user_link(uid, username)}, этой командой можно купить комнату!\nСписок комнат можно посмотреть командой Список комнат\n\nПример: Купить комнату [номер комнаты]", parse_mode=ParseMode.HTML)
+        return
+
+    if room_num < 5 or room_num > 19:
+        await update.message.reply_text(f"{user_link(uid, username)}, можно купить комнаты с 5 по 19.", parse_mode=ParseMode.HTML)
+        return
+
+    if room_num in owned:
+        await update.message.reply_text(f"{user_link(uid, username)}, у вас уже есть эта комната!", parse_mode=ParseMode.HTML)
+        return
+
+    req_people = ROOMS_DATA[room_num]["unlock_people"]
+    if user["people"] < req_people:
+        await update.message.reply_text(f"{user_link(uid, username)}, у тебя недостаточно людей в бункере!", parse_mode=ParseMode.HTML)
+        return
+
+    price = ROOM_BUY_PRICES[room_num]
+
+    if user["balance"] < price:
+        await update.message.reply_text(
+            f"{user_link(uid, username)}, недостаточно крышек!"
+        , parse_mode=ParseMode.HTML)
+        return
+
     async with aiosqlite.connect(DB_PATH) as db:
-        async with db.execute("SELECT balance, bottles, vip FROM users WHERE user_id = ?", (user_id,)) as cur:
-            user = await cur.fetchone()
-        async with db.execute("SELECT level FROM rooms WHERE user_id = ? AND room_num = ?", (user_id, room_num)) as cur:
-            room = await cur.fetchone()
-        if not user or not room:
-            return False, 0, False
-        required_vip = {20: 1, 100: 2, 1000: 3, 5000: 4}.get(levels, 0)
-        if user[2] < required_vip:
-            return False, 0, False
-        cost = sum(get_upgrade_cost(room_num, room[0] + step) for step in range(levels))
-        if use_bottles:
-            spent = cost / 10_000
-            if user[1] < spent:
-                return False, cost, False
-            await db.execute("UPDATE users SET bottles = bottles - ? WHERE user_id = ?", (spent, user_id))
-        else:
-            if user[0] < cost:
-                return False, cost, False
-            await db.execute("UPDATE users SET balance = balance - ? WHERE user_id = ?", (cost, user_id))
-        await db.execute("UPDATE rooms SET level = level + ? WHERE user_id = ? AND room_num = ?", (levels, user_id, room_num))
-        broken = random.randint(1, 100) <= {1: 1, 5: 3, 20: 10, 100: 15, 1000: 25, 5000: 25}[levels]
-        if broken:
-            await db.execute("UPDATE users SET bunker_broken = 1 WHERE user_id = ?", (user_id,))
+        await db.execute("UPDATE users SET balance = balance - ? WHERE user_id = ?", (price, uid))
+        await db.execute("INSERT INTO rooms (user_id, room_num, level) VALUES (?, ?, 1)", (uid, room_num))
         await db.commit()
-    return True, cost, broken
+
+    await update.message.reply_text(
+        f"{user_link(uid, username)}, ты успешно купил(-а) комнату: {ROOMS_DATA[room_num]['name']}!\n"
+    , parse_mode=ParseMode.HTML)
+
+async def cmd_rooms_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await cmd_rooms_list(update, context)
