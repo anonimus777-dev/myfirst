@@ -9,9 +9,8 @@ jobs:
   fix:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Patch
+      - uses: actions/checkout@v4
+      - name: Patch game messages
         shell: bash
         run: |
           python3 - <<'PY'
@@ -20,60 +19,138 @@ jobs:
           p = Path('бот.py')
           s = p.read_text(encoding='utf-8')
 
-          def section(start, end):
-              a = s.index(start)
-              b = s.index(end, a)
-              return a, b, s[a:b]
+          def once(old, new, label):
+              global s
+              if old not in s:
+                  raise SystemExit(f'{label}: pattern not found')
+              s = s.replace(old, new, 1)
 
-          # Compact generic result blocks.
-          replacements = [
-              ('    # Рулетка\n', '    # Кубик\n', 'roulette'),
-              ('    # Кубик\n', '    # Стаканчик\n', 'cube'),
-              ('    # Стаканчик\n', '    # Орёл/Решка\n', 'cups'),
-              ('    # Орёл/Решка\n', '    # Боулинг\n', 'coin'),
-              ('    # Спин (слоты)\n', '    # Рулетка\n', 'spin'),
+          # 3-second cooldown for games that previously had none.
+          once(
+              '        bet_type = parts_g[1].lower()\n',
+              '        cd = check_cooldown(uid)\n        if cd:\n            await update.message.reply_text(f"⏳ Подождите {cd} сек.")\n            return\n        bet_type = parts_g[1].lower()\n',
+              'roulette cooldown')
+          once(
+              '        guess = int(parts_g[1])\n',
+              '        cd = check_cooldown(uid)\n        if cd:\n            await update.message.reply_text(f"⏳ Подождите {cd} сек.")\n            return\n        guess = int(parts_g[1])\n',
+              'cube cooldown')
+          once(
+              '        guess = int(parts_g[1])\n        correct = random.randint(1, 3)\n',
+              '        cd = check_cooldown(uid)\n        if cd:\n            await update.message.reply_text(f"⏳ Подождите {cd} сек.")\n            return\n        guess = int(parts_g[1])\n        set_cooldown(uid)\n        correct = random.randint(1, 3)\n',
+              'cups cooldown')
+          once(
+              '        guess = "орёл" if text.startswith("орёл") or text.startswith("орел") else "решка"\n',
+              '        cd = check_cooldown(uid)\n        if cd:\n            await update.message.reply_text(f"⏳ Подождите {cd} сек.")\n            return\n        guess = "орёл" if text.startswith("орёл") or text.startswith("орел") else "решка"\n        set_cooldown(uid)\n',
+              'coin cooldown')
+          once(
+              '        bet = parse_bet(parts_g[1], user["balance"])\n        if bet <= 0 or user["balance"] < bet:\n',
+              '        cd = check_cooldown(uid)\n        if cd:\n            await update.message.reply_text(f"⏳ Подождите {cd} сек.")\n            return\n        bet = parse_bet(parts_g[1], user["balance"])\n        if bet <= 0 or user["balance"] < bet:\n',
+              'spin cooldown')
+
+          # Compact roulette result.
+          old = '''        sign = "+" if change >= 0 else ""
+        await update.message.reply_text(
+            f"🎮 {user_link(uid, user['username'])}\\n"
+            f"🎡 Шарик: {num}\\n"
+            f"💸 Ставка: {fmt_smart(bet)} кр.\\n"
+            f"{desc}\\n"
+            f"📊 Итог: {sign}{fmt_smart(change)} кр.",
+            parse_mode=ParseMode.HTML
+        )'''
+          new = '''        color = "🟢" if num == 0 else ("🔴" if num in red_nums else "⚫️")
+        result_text = f"✅ Твой выигрыш составил <b>{fmt_smart(change)}</b> кр.!" if change > 0 else "🛑 Ты проиграл(-а)! Попытай удачу в следующий раз 😣"
+        await update.message.reply_text(
+            f"{user_link(uid, user['username'])}\\n"
+            f"🖲 Выпало - {num} {color}\\n"
+            f"{result_text}",
+            parse_mode=ParseMode.HTML
+        )'''
+          once(old, new, 'roulette output')
+
+          # Compact cube result.
+          old = '''        sign = "+" if change >= 0 else ""
+        await update.message.reply_text(
+            f"🎲 {user_link(uid, user['username'])}\\n"
+            f"💸 Ставка: {fmt_smart(bet)} кр. на {dice_emojis[guess]}\\n"
+            f"{desc}\\n"
+            f"📊 Итог: {sign}{fmt_smart(change)} кр.",
+            parse_mode=ParseMode.HTML
+        )'''
+          new = '''        result_text = f"✅ Твой выигрыш составил <b>{fmt_smart(change)}</b> кр.!" if change > 0 else "🛑 Ты проиграл(-а)! Попытай удачу в следующий раз 😣"
+        await update.message.reply_text(
+            f"{user_link(uid, user['username'])}\\n"
+            f"🎲 Выпало - {rolled}\\n"
+            f"{result_text}",
+            parse_mode=ParseMode.HTML
+        )'''
+          once(old, new, 'cube output')
+
+          # Compact cups result.
+          old = '''        await update.message.reply_text(
+            f"🥛 {user_link(uid, user['username'])}\\n"
+            f"1:{cups[1]}  2:{cups[2]}  3:{cups[3]}\\n"
+            f"{desc}" + (f"\\n+{fmt_smart(bonus)} кр." if bonus else ""),
+            parse_mode=ParseMode.HTML
+        )'''
+          new = '''        result_text = f"✅ Твой выигрыш составил <b>{fmt_smart(bonus)}</b> кр.!" if bonus else "🛑 Ты проиграл(-а)! Попытай удачу в следующий раз 😣"
+        await update.message.reply_text(
+            f"{user_link(uid, user['username'])}\\n"
+            f"🥛 Выпало - {correct}\\n"
+            f"{result_text}",
+            parse_mode=ParseMode.HTML
+        )'''
+          once(old, new, 'cups output')
+
+          # Compact coin result.
+          old = '''        sign = "+" if change >= 0 else ""
+        await update.message.reply_text(
+            f"🪙 {user_link(uid, user['username'])}\\n"
+            f"💸 Ставка: {fmt_smart(bet)} кр. на {emojis[guess]}\\n"
+            f"{desc}\\n"
+            f"📊 Итог: {sign}{fmt_smart(change)} кр.",
+            parse_mode=ParseMode.HTML
+        )'''
+          new = '''        result_text = f"✅ Твой выигрыш составил <b>{fmt_smart(change)}</b> кр.!" if change > 0 else "🛑 Ты проиграл(-а)! Попытай удачу в следующий раз 😣"
+        await update.message.reply_text(
+            f"{user_link(uid, user['username'])}\\n"
+            f"🪙 Выпало - {emojis[result]}\\n"
+            f"{result_text}",
+            parse_mode=ParseMode.HTML
+        )'''
+          once(old, new, 'coin output')
+
+          # Compact slots result.
+          old = '''        sign = "+" if change >= 0 else ""
+        await update.message.reply_text(
+            f"🎰 {user_link(uid, user['username'])}\\n"
+            f"[ {' | '.join(reel)} ]\\n"
+            f"💸 Ставка: {fmt_smart(bet)} кр.\\n"
+            f"{desc}\\n"
+            f"📊 Итог: {sign}{fmt_smart(change)} кр.",
+            parse_mode=ParseMode.HTML
+        )'''
+          new = '''        result_text = f"✅ Твой выигрыш составил <b>{fmt_smart(change)}</b> кр.!" if change > 0 else "🛑 Ты проиграл(-а)! Попытай удачу в следующий раз 😣"
+        await update.message.reply_text(
+            f"{user_link(uid, user['username'])}\\n"
+            f"🎰 Выпало - {' '.join(reel)}\\n"
+            f"{result_text}",
+            parse_mode=ParseMode.HTML
+        )'''
+          once(old, new, 'spin output')
+
+          # Compact native dice results.
+          patterns = [
+              ('🎳', 'pins'),
+              ('🏀', 'roll'),
+              ('🎯', 'roll'),
           ]
-
-          for start, end, kind in replacements:
-              a, b, block = section(start, end)
-
-              if kind == 'roulette':
-                  block = re.sub(r'\n        sign = "\\+" if change >= 0 else ""\n        await update\.message\.reply_text\(.*?\n        \)', '''\n        color = "🟢" if num == 0 else ("🔴" if num in red_nums else "⚫️")\n        result_text = f"✅ Твой выигрыш составил <b>{fmt_smart(change)}</b> кр.!" if change > 0 else "🛑 Ты проиграл(-а)! Попытай удачу в следующий раз 😣"\n        await update.message.reply_text(\n            f"{user_link(uid, user['username'])}\\n"\n            f"🖲 Выпало - {num} {color}\\n"\n            f"{result_text}",\n            parse_mode=ParseMode.HTML\n        )''', block, count=1, flags=re.S)
-                  block = block.replace('        num = random.randint(0, 36)\n', '        set_cooldown(uid)\n        num = random.randint(0, 36)\n')
-                  if 'cd = check_cooldown(uid)' not in block:
-                      block = block.replace('        bet_type = parts_g[1].lower()\n', '        cd = check_cooldown(uid)\n        if cd:\n            await update.message.reply_text(f"⏳ Подождите {cd} сек.")\n            return\n        bet_type = parts_g[1].lower()\n', 1)
-              elif kind == 'cube':
-                  block = re.sub(r'\n        sign = "\\+" if change >= 0 else ""\n        await update\.message\.reply_text\(.*?\n        \)', '''\n        result_text = f"✅ Твой выигрыш составил <b>{fmt_smart(change)}</b> кр.!" if change > 0 else "🛑 Ты проиграл(-а)! Попытай удачу в следующий раз 😣"\n        await update.message.reply_text(\n            f"{user_link(uid, user['username'])}\\n"\n            f"🎲 Выпало - {rolled}\\n"\n            f"{result_text}",\n            parse_mode=ParseMode.HTML\n        )''', block, count=1, flags=re.S)
-                  block = block.replace('        rolled = random.randint(1, 6)\n', '        set_cooldown(uid)\n        rolled = random.randint(1, 6)\n')
-                  if 'cd = check_cooldown(uid)' not in block:
-                      block = block.replace('        guess = int(parts_g[1])\n', '        cd = check_cooldown(uid)\n        if cd:\n            await update.message.reply_text(f"⏳ Подождите {cd} сек.")\n            return\n        guess = int(parts_g[1])\n', 1)
-              elif kind == 'cups':
-                  block = re.sub(r'        await update\.message\.reply_text\(\n            f"🥛 .*?\n        \)', '''        result_text = f"✅ Твой выигрыш составил <b>{fmt_smart(bonus)}</b> кр.!" if bonus else "🛑 Ты проиграл(-а)! Попытай удачу в следующий раз 😣"\n        await update.message.reply_text(\n            f"{user_link(uid, user['username'])}\\n"\n            f"🥛 Выпало - {correct}\\n"\n            f"{result_text}",\n            parse_mode=ParseMode.HTML\n        )''', block, count=1, flags=re.S)
-                  if 'cd = check_cooldown(uid)' not in block:
-                      block = block.replace('        guess = int(parts_g[1])\n', '        cd = check_cooldown(uid)\n        if cd:\n            await update.message.reply_text(f"⏳ Подождите {cd} сек.")\n            return\n        guess = int(parts_g[1])\n', 1)
-                  block = block.replace('        correct = random.randint(1, 3)\n', '        set_cooldown(uid)\n        correct = random.randint(1, 3)\n')
-              elif kind == 'coin':
-                  block = re.sub(r'        await update\.message\.reply_text\(\n            f"🪙 .*?\n        \)', '''        result_text = f"✅ Твой выигрыш составил <b>{fmt_smart(change)}</b> кр.!" if change > 0 else "🛑 Ты проиграл(-а)! Попытай удачу в следующий раз 😣"\n        await update.message.reply_text(\n            f"{user_link(uid, user['username'])}\\n"\n            f"🪙 Выпало - {emojis[result]}\\n"\n            f"{result_text}",\n            parse_mode=ParseMode.HTML\n        )''', block, count=1, flags=re.S)
-                  if 'cd = check_cooldown(uid)' not in block:
-                      block = block.replace('        guess = "орёл" if text.startswith("орёл") or text.startswith("орел") else "решка"\n', '        cd = check_cooldown(uid)\n        if cd:\n            await update.message.reply_text(f"⏳ Подождите {cd} сек.")\n            return\n        guess = "орёл" if text.startswith("орёл") or text.startswith("орел") else "решка"\n', 1)
-                  block = block.replace('        result = random.choice(["орёл", "решка"])\n', '        set_cooldown(uid)\n        result = random.choice(["орёл", "решка"])\n')
-              elif kind == 'spin':
-                  block = re.sub(r'        await update\.message\.reply_text\(\n            f"🎰 .*?\n        \)', '''        result_text = f"✅ Твой выигрыш составил <b>{fmt_smart(change)}</b> кр.!" if change > 0 else "🛑 Ты проиграл(-а)! Попытай удачу в следующий раз 😣"\n        await update.message.reply_text(\n            f"{user_link(uid, user['username'])}\\n"\n            f"🎰 Выпало - {' '.join(reel)}\\n"\n            f"{result_text}",\n            parse_mode=ParseMode.HTML\n        )''', block, count=1, flags=re.S)
-                  if 'cd = check_cooldown(uid)' not in block:
-                      block = block.replace('        bet = parse_bet(parts_g[1], user["balance"])\n', '        cd = check_cooldown(uid)\n        if cd:\n            await update.message.reply_text(f"⏳ Подождите {cd} сек.")\n            return\n        bet = parse_bet(parts_g[1], user["balance"])\n', 1)
-                  block = block.replace('        slots = ["🍒", "🍋", "🍊", "🍇", "⭐️", "💎", "7️⃣"]\n', '        set_cooldown(uid)\n        slots = ["🍒", "🍋", "🍊", "🍇", "⭐️", "💎", "7️⃣"]\n')
-
-              s = s[:a] + block + s[b:]
-
-          # Compact native dice game results.
-          for marker, next_marker, emoji, value_var in [
-              ('    # Боулинг\n', '    # Баскетбол\n', '🎳', 'pins'),
-              ('    # Баскетбол\n', '    # Дартс\n', '🏀', 'roll'),
-              ('    # Дартс\n', '    # Крестики-нолики\n', '🎯', 'roll'),
-          ]:
-              a, b, block = section(marker, next_marker)
-              block = re.sub(r'        sign = "\\+" if change >= 0 else ""\n        await update\.message\.reply_text\(.*?\n        \)', f'''        result_text = f"✅ Твой выигрыш составил <b>{{fmt_smart(change)}}</b> кр.!" if change > 0 else "🛑 Ты проиграл(-а)! Попытай удачу в следующий раз 😣"\n        await update.message.reply_text(\n            f"{{user_link(uid, user['username'])}}\\n"\n            f"{emoji} Выпало - {{{value_var}}}\\n"\n            f"{{result_text}}",\n            parse_mode=ParseMode.HTML\n        )''', block, count=1, flags=re.S)
-              s = s[:a] + block + s[b:]
+          for emoji, var in patterns:
+              pattern = rf'''        sign = "\\+" if change >= 0 else ""\n        await update\.message\.reply_text\(\n            f"{re.escape(emoji)} .*?\n        \)'''
+              repl = f'''        result_text = f"✅ Твой выигрыш составил <b>{{fmt_smart(change)}}</b> кр.!" if change > 0 else "🛑 Ты проиграл(-а)! Попытай удачу в следующий раз 😣"\n        await update.message.reply_text(\n            f"{{user_link(uid, user['username'])}}\\n"\n            f"{emoji} Выпало - {{{var}}}\\n"\n            f"{{result_text}}",\n            parse_mode=ParseMode.HTML\n        )'''
+              s2, n = re.subn(pattern, repl, s, count=1, flags=re.S)
+              if n != 1:
+                  raise SystemExit(f'{emoji} output: pattern not found')
+              s = s2
 
           p.write_text(s, encoding='utf-8')
           PY
@@ -83,7 +160,7 @@ jobs:
           git add бот.py
           git diff --cached --quiet || git commit -m 'fix: compact game results and 3s cooldown'
           git push
-          rm .github/workflows/compact-games.yml
+          rm -f .github/workflows/compact-games.yml
           git add -u .github/workflows/compact-games.yml
-          git commit -m 'chore: remove temporary game workflow'
-          git push
+          git diff --cached --quiet || git commit -m 'chore: remove temporary game workflow'
+          git push || true
