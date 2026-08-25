@@ -1,0 +1,37 @@
+name: Fix clean shutdown
+
+on:
+  push:
+    paths:
+      - '.github/workflows/fix_shutdown.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch main shutdown
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('бот.py')
+          s = p.read_text(encoding='utf-8')
+          old = '''    async with app:\n        await app.start()\n        await app.updater.start_polling()\n        print("Бот запущен...")\n        await asyncio.Event().wait()\n        await app.updater.stop()\n        await app.stop()\n'''
+          new = '''    async with app:\n        await app.start()\n        await app.updater.start_polling()\n        print("Бот запущен...")\n        try:\n            await asyncio.Event().wait()\n        except asyncio.CancelledError:\n            pass\n        finally:\n            if app.updater.running:\n                await app.updater.stop()\n            if app.running:\n                await app.stop()\n'''
+          if old not in s:
+              raise SystemExit('Expected main() shutdown block was not found; no changes made.')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+          PY
+          python3 -m py_compile бот.py
+      - name: Commit and remove workflow
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add бот.py
+          git commit -m 'fix: clean shutdown on Ctrl+C'
+          git rm .github/workflows/fix_shutdown.yml
+          git commit -m 'chore: remove temporary workflow'
+          git push
