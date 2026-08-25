@@ -1,6 +1,8 @@
 name: Fix game animations
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -16,50 +18,19 @@ jobs:
           from pathlib import Path
           p = Path('бот.py')
           s = p.read_text(encoding='utf-8')
-
           old = 'sticker_msg = await update.message.reply_sticker("CAACAgIAAxkBAAIBd2cKW4k5tN3RAAGzAAFLUPGRAAFiXQACDgADwDZIE6ZaHBtV0XNHBQQ")'
-
-          # Bowling: Telegram native bowling animation, value 1-6.
-          marker = '    # Боулинг\n'
-          start = s.index(marker)
-          end = s.index('    # Баскетбол\n', start)
-          block = s[start:end]
-          block = block.replace(
-              f'        {old}\n        await asyncio.sleep(2)\n        pins = random.randint(0, 10)',
-              '        dice_msg = await update.message.reply_dice(emoji="🎳")\n        await asyncio.sleep(3)\n        pins = dice_msg.dice.value'
-          )
+          start = s.index('    # Боулинг\n'); end = s.index('    # Баскетбол\n', start); block = s[start:end]
+          block = block.replace(f'        {old}\n        await asyncio.sleep(2)\n        pins = random.randint(0, 10)', '        dice_msg = await update.message.reply_dice(emoji="🎳")\n        await asyncio.sleep(3)\n        pins = dice_msg.dice.value')
           s = s[:start] + block + s[end:]
-
-          # Basketball: Telegram native basketball animation, value 1-5.
-          start = s.index('    # Баскетбол\n')
-          end = s.index('    # Дартс\n', start)
-          block = s[start:end]
-          block = block.replace(
-              f'        {old}\n        await asyncio.sleep(2)\n        roll = random.randint(1, 10)',
-              '        dice_msg = await update.message.reply_dice(emoji="🏀")\n        await asyncio.sleep(3)\n        roll = dice_msg.dice.value'
-          )
+          start = s.index('    # Баскетбол\n'); end = s.index('    # Дартс\n', start); block = s[start:end]
+          block = block.replace(f'        {old}\n        await asyncio.sleep(2)\n        roll = random.randint(1, 10)', '        dice_msg = await update.message.reply_dice(emoji="🏀")\n        await asyncio.sleep(3)\n        roll = dice_msg.dice.value')
           s = s[:start] + block + s[end:]
-
-          # Darts: Telegram native darts animation, value 1-6.
-          start = s.index('    # Дартс\n')
-          end = s.index('    # Крестики-нолики\n', start)
-          block = s[start:end]
-          block = block.replace(
-              f'        {old}\n        await asyncio.sleep(2)\n        roll = random.randint(1, 100)',
-              '        dice_msg = await update.message.reply_dice(emoji="🎯")\n        await asyncio.sleep(3)\n        roll = dice_msg.dice.value'
-          )
+          start = s.index('    # Дартс\n'); end = s.index('    # Крестики-нолики\n', start); block = s[start:end]
+          block = block.replace(f'        {old}\n        await asyncio.sleep(2)\n        roll = random.randint(1, 100)', '        dice_msg = await update.message.reply_dice(emoji="🎯")\n        await asyncio.sleep(3)\n        roll = dice_msg.dice.value')
           s = s[:start] + block + s[end:]
-
-          # Generic dice game: use Telegram native dice instead of local random value.
-          start = s.index('    # Кубик\n')
-          end = s.index('    # Стаканчик\n', start)
-          block = s[start:end]
-          block = block.replace(
-              '        rolled = random.randint(1, 6)',
-              '        dice_msg = await update.message.reply_dice(emoji="🎲")\n        await asyncio.sleep(3)\n        rolled = dice_msg.dice.value'
-          )
+          start = s.index('    # Кубик\n'); end = s.index('    # Стаканчик\n', start); block = s[start:end]
+          block = block.replace('        rolled = random.randint(1, 6)', '        dice_msg = await update.message.reply_dice(emoji="🎲")\n        await asyncio.sleep(3)\n        rolled = dice_msg.dice.value')
           s = s[:start] + block + s[end:]
-
           p.write_text(s, encoding='utf-8')
           PY
           python3 -m py_compile бот.py
