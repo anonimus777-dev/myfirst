@@ -227,10 +227,7 @@ async def handle_promo(update: Update, user: dict, promo: str):
             PROMO_CODES.pop(promo_lower, None)
         else:
             promo_data["uses_left"] = uses_left
-    await update.message.reply_text(f"{user_link(uid, username)}, тебе начислено:
-{reward_text}
-
-🧡 Приятной игры! 🧡", parse_mode=ParseMode.HTML)
+    await update.message.reply_text(f"{user_link(uid, username)}, тебе начислено:\n{reward_text}\n\n🧡 Приятной игры! 🧡", parse_mode=ParseMode.HTML)
 
 
 # ── Referral ─────────────────────────────────────────────────────────────────
