@@ -1653,9 +1653,15 @@ async def main():
         await app.start()
         await app.updater.start_polling()
         print("Бот запущен...")
-        await asyncio.Event().wait()
-        await app.updater.stop()
-        await app.stop()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            pass
+        finally:
+            if app.updater.running:
+                await app.updater.stop()
+            if app.running:
+                await app.stop()
 
 
 if __name__ == "__main__":
