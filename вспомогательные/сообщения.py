@@ -55,6 +55,14 @@ async def build_bunker_text(user_id: int) -> str:
     else:
         income_line = f"💵 Общая прибыль {fmt_smart(total_income)} кр./час"
 
+    # Максимальная вместимость бункера определяется самой маленькой
+    # вместимостью среди всех купленных комнат.
+    room_capacities = [
+        ROOMS_DATA[r["room_num"]]["capacity"] + (r["level"] - 1) * 2
+        for r in rooms
+    ]
+    max_people = min(room_capacities) if room_capacities else 0
+
     return (
         f"{custom_line}{vip_line}"
         f"🙎‍♂️ {user_link(user_id, username)}\n"
@@ -66,7 +74,7 @@ async def build_bunker_text(user_id: int) -> str:
         f"🧍 Людей в бункере: {user['people']}\n"
         f"     ↳ Людей в очереди в бункер: {user['queue']}/5\n\n"
         f"🏠 Комнаты:\n<blockquote expandable>{rooms_text}</blockquote>"
-        f"  Макс. вместимость людей: {user['people']}\n\n"
+        f"  Макс. вместимость людей: {max_people}\n\n"
         f"{income_line}\n"
         f"📅 Дата регистрации: {user['registered_at']}"
     )
@@ -235,7 +243,6 @@ async def build_top_text(user_id: int, category: str) -> str:
     return "\n".join(lines)
 
 # ── Пассивный доход каждые 30 минут ──────────────────────────────────────────
-
 def ho_board_text(board: list, bet: int, p1_name: str, p2_name: str) -> str:
     symbols = {0: "⬜", 1: "❌", 2: "⭕️"}
     rows = []
