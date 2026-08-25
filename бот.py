@@ -81,6 +81,31 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ── Admin commands ───────────────────────────────────────────────────────
     if uid in ADMIN_IDS:
         parts = raw.split()
+
+        selected_reward_t = context.user_data.get("admin_promo_reward_type")
+        if selected_reward_t and parts and parts[0].lower() != "добпромо":
+            if len(parts) < 2:
+                await update.message.reply_text("Формат: <code>код сумма [использований]</code>", parse_mode=ParseMode.HTML)
+                return
+            promo_code_new = parts[0].lower()
+            try:
+                reward_a = int(parts[1])
+                uses = int(parts[2]) if len(parts) >= 3 else 1
+            except ValueError:
+                await update.message.reply_text("Сумма и количество использований должны быть числами.")
+                return
+            if reward_a <= 0 or uses <= 0:
+                await update.message.reply_text("Сумма и количество использований должны быть больше нуля.")
+                return
+            PROMO_CODES[promo_code_new] = {"reward_type": selected_reward_t, "amount": reward_a, "uses_left": uses}
+            context.user_data.pop("admin_promo_reward_type", None)
+            await update.message.reply_text(
+                f"✅ Промокод '{promo_code_new}' добавлен: {selected_reward_t} ×{reward_a}.\n"
+                f"👥 Использований: {uses} (один пользователь — только 1 раз).",
+                parse_mode=ParseMode.HTML
+            )
+            return
+
         if parts[0].lower() == "выдать" and len(parts) == 3 and parts[1].isdigit() and parts[2].isdigit():
             target_id = int(parts[1])
             amount = int(parts[2])
