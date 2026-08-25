@@ -868,9 +868,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"{user_link(uid, user['username'])}, недостаточно крышек!", parse_mode=ParseMode.HTML)
             return
         set_cooldown(uid)
-        sticker_msg = await update.message.reply_sticker("CAACAgIAAxkBAAIBd2cKW4k5tN3RAAGzAAFLUPGRAAFiXQACDgADwDZIE6ZaHBtV0XNHBQQ")
-        await asyncio.sleep(2)
-        pins = random.randint(0, 10)
+        dice_msg = await update.message.reply_dice(emoji="🎳")
+        await asyncio.sleep(3)
+        pins = dice_msg.dice.value
         if pins == 10:
             mult, win = 3, bet * 3
             desc = f"🎳 СТРАЙК! Все 10 кеглей! x3"
@@ -913,9 +913,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"{user_link(uid, user['username'])}, недостаточно крышек!", parse_mode=ParseMode.HTML)
             return
         set_cooldown(uid)
-        sticker_msg = await update.message.reply_sticker("CAACAgIAAxkBAAIBd2cKW4k5tN3RAAGzAAFLUPGRAAFiXQACDgADwDZIE6ZaHBtV0XNHBQQ")
-        await asyncio.sleep(2)
-        roll = random.randint(1, 10)
+        dice_msg = await update.message.reply_dice(emoji="🏀")
+        await asyncio.sleep(3)
+        roll = dice_msg.dice.value
         if roll >= 8:
             win, desc = bet * 2, f"🏀 Попал в кольцо! x2"
         elif roll >= 5:
@@ -953,9 +953,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"{user_link(uid, user['username'])}, недостаточно крышек!", parse_mode=ParseMode.HTML)
             return
         set_cooldown(uid)
-        sticker_msg = await update.message.reply_sticker("CAACAgIAAxkBAAIBd2cKW4k5tN3RAAGzAAFLUPGRAAFiXQACDgADwDZIE6ZaHBtV0XNHBQQ")
-        await asyncio.sleep(2)
-        roll = random.randint(1, 100)
+        dice_msg = await update.message.reply_dice(emoji="🎯")
+        await asyncio.sleep(3)
+        roll = dice_msg.dice.value
         if roll <= 5:
             win, mult, desc = bet * 10, "x10", "меткость твоё второе имя! БУЛЛСАЙ! 🎯"
         elif roll <= 20:

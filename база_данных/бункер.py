@@ -61,16 +61,17 @@ async def do_room_upgrade(user_id: int, room_num: int, levels: int, use_bottles:
     break_chance = break_chances.get(levels, 0)
     broke = random.randint(1, 100) <= break_chance
 
+    cost_text = f"{fmt_bottles(total_cost / BOTTLE_TO_COINS)} 🍾" if use_bottles else f"{fmt_smart(total_cost)} кр."
+
     if broke:
         async with aiosqlite.connect(DB_PATH) as db:
             await db.execute("UPDATE users SET bunker_broken = 1 WHERE user_id=?", (user_id,))
             await db.commit()
-        # Возвращаем два значения: сообщение об улучшении и флаг пожара
-        return f"Ты улучшил(-а) '{ROOMS_DATA[room_num]['name']}' до {new_level} уровня за {fmt_smart(total_cost)} кр.", True
+        return f"Ты улучшил(-а) '{ROOMS_DATA[room_num]['name']}' до {new_level} уровня за {cost_text}.", True
 
     return (
         f"Ты улучшил(-а) '{ROOMS_DATA[room_num]['name']}' до {new_level} уровня\n"
-        f"за {fmt_smart(total_cost)} кр."
+        f"за {cost_text}."
     ), False
 
 async def queue_refill_job(context: ContextTypes.DEFAULT_TYPE):
