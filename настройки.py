@@ -25,9 +25,7 @@ CROP_FORMS_ACC = {
 }
 
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
-if not BOT_TOKEN:
-    raise RuntimeError("Переменная окружения BOT_TOKEN не задана.")
+BOT_TOKEN = "8515631446:AAHYtrS34TKRYg6pkVtz1HTRyJ-I0zuWerE"
 
 OCHKO_GAMES = {} 
 
