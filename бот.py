@@ -1413,7 +1413,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not user2:
             await query.answer("Игрок не найден.", show_alert=True)
             return
-        await query.answer()
         await ensure_greenhouse(uid)
         gh = await get_greenhouse(uid)
         selected = gh.get("selected_crop") or "картошка"
