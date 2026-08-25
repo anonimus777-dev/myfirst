@@ -147,11 +147,11 @@ async def handle_grow(update: Update, user: dict, parts_raw: list):
     water_limit = get_vip_water_limit(vip)
     water = gh["water"]
     if water < qty:
-        await update.effective_message.reply_text(
-            f"{user_link(uid, username)}, у тебя недостаточно воды!\n"
-            f"Есть: {water}/{water_limit} 💧",
-            parse_mode=ParseMode.HTML
-        )
+        message = f"{user_link(uid, username)}, у тебя недостаточно воды!"
+        if update.callback_query:
+            await update.callback_query.answer(message, show_alert=False)
+        else:
+            await update.effective_message.reply_text(message, parse_mode=ParseMode.HTML)
         return
 
     total_crop = 0
@@ -170,13 +170,20 @@ async def handle_grow(update: Update, user: dict, parts_raw: list):
 
     gh = await get_greenhouse(uid)
     water_left = gh["water"]
-    await update.effective_message.reply_text(
-        f"🙎‍♂️ {user_link(uid, username)}, ты успешно вырастил(-а) {CROP_FORMS_ACC.get(crop_name, crop_name)}!\n"
-        f"Получено: {total_crop} {crop_data['emoji']}, {total_exp} опыта\n"
-        f"Потрачено: {qty} 💧\n"
-        f"Осталось воды: {water_left}/{water_limit} 💧",
-        parse_mode=ParseMode.HTML
+    message = (
+        f"{user_link(uid, username)}, успешно выращено: {total_crop} {crop_data['emoji']}, "
+        f"+{total_exp} опыта, -{qty} 💧"
     )
+    if update.callback_query:
+        await update.callback_query.answer(message, show_alert=False)
+    else:
+        await update.effective_message.reply_text(
+            f"🙎‍♂️ {user_link(uid, username)}, ты успешно вырастил(-а) {CROP_FORMS_ACC.get(crop_name, crop_name)}!\n"
+            f"Получено: {total_crop} {crop_data['emoji']}, {total_exp} опыта\n"
+            f"Потрачено: {qty} 💧\n"
+            f"Осталось воды: {water_left}/{water_limit} 💧",
+            parse_mode=ParseMode.HTML
+        )
 
 async def handle_sell_crop(update: Update, user: dict, parts_raw: list):
     uid = user["user_id"]

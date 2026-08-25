@@ -193,6 +193,10 @@ async def handle_promo(update: Update, user: dict, promo: str):
         reward_type = str(promo_data.get("reward_type", "")).lower()
         amount = int(promo_data.get("amount", 0))
         uses_left = int(promo_data.get("uses_left", 1))
+        SQLITE_MAX = 9223372036854775807
+        if amount < 0 or amount > SQLITE_MAX:
+            await update.message.reply_text("❌ Слишком большое количество награды.")
+            return
         if uses_left <= 0:
             await update.message.reply_text("❌ У этого промокода закончились использования.")
             return
@@ -201,6 +205,23 @@ async def handle_promo(update: Update, user: dict, promo: str):
                 if await cur.fetchone():
                     await update.message.reply_text(f"{user_link(uid, username)}, ты уже использовал(-а) этот промокод!", parse_mode=ParseMode.HTML)
                     return
+            reward_columns = {
+                "coins": "balance",
+                "bottles": "bottles",
+                "rating": "rating",
+                "bbcoins": "bb_coins",
+                "exp": "exp",
+            }
+            reward_column = reward_columns.get(reward_type)
+            if reward_column:
+                table = "greenhouse" if reward_type == "exp" else "users"
+                async with db.execute(f"SELECT COALESCE({reward_column}, 0) FROM {table} WHERE user_id=?", (uid,)) as cur:
+                    row = await cur.fetchone()
+                current_value = int(row[0] or 0) if row else 0
+                if current_value > SQLITE_MAX - amount:
+                    await update.message.reply_text("❌ Награда слишком большая для текущего баланса.")
+                    return
+
             if reward_type == "coins":
                 await db.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (amount, uid))
                 reward_text = f"💰 {fmt_smart(amount)} крышек"
