@@ -1,0 +1,33 @@
+name: fix-greenhouse-toast
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fix callback toast
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('бот.py')
+          s = p.read_text(encoding='utf-8')
+          old = '''        await query.answer()\n        await ensure_greenhouse(uid)\n        gh = await get_greenhouse(uid)\n        selected = gh.get("selected_crop") or "картошка"\n        await handle_grow(update, user2, ["вырастить", selected, str(qty)])\n'''
+          new = '''        await ensure_greenhouse(uid)\n        gh = await get_greenhouse(uid)\n        selected = gh.get("selected_crop") or "картошка"\n        await handle_grow(update, user2, ["вырастить", selected, str(qty)])\n'''
+          if old not in s:
+              raise SystemExit('grow callback block not found')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+          PY
+          python3 -m py_compile 'бот.py' 'база_данных/теплица.py'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add 'бот.py'
+          git commit -m 'fix: show greenhouse grow callback toast' || true
+          git push origin main
+          git rm '.github/workflows/fix-greenhouse-toast.yml' || true
+          git commit -m 'chore: remove temporary greenhouse fix workflow' || true
+          git push origin main || true
