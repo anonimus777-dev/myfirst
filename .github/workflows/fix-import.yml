@@ -1,0 +1,37 @@
+name: Fix keyboard import
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: ${{ github.event.head_commit.message != 'chore: apply keyboard import fix [skip ci]' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fix import
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('бот.py')
+          text = p.read_text(encoding='utf-8')
+          old = 'from клавиатуры.общее import no_bunker_keyboard, back_keyboard, donate_keyboard'
+          new = 'from клавиатуры.общие import no_bunker_keyboard, back_keyboard, donate_keyboard'
+          if old in text:
+              p.write_text(text.replace(old, new), encoding='utf-8')
+          PY
+
+      - name: Commit fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add бот.py
+          git diff --cached --quiet && exit 0
+          git commit -m 'chore: apply keyboard import fix [skip ci]'
+          git push
