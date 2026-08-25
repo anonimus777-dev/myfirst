@@ -1,1 +1,3 @@
-# Зависимости проекта будут добавлены после выбора версии Python и Telegram-фреймворка.
+python-telegram-bot>=21.0
+aiosqlite>=0.19
+pytz>=2024.1
