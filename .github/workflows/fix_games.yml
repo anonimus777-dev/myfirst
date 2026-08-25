@@ -1,0 +1,75 @@
+name: Fix game animations
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fix games
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('бот.py')
+          s = p.read_text(encoding='utf-8')
+
+          old = 'sticker_msg = await update.message.reply_sticker("CAACAgIAAxkBAAIBd2cKW4k5tN3RAAGzAAFLUPGRAAFiXQACDgADwDZIE6ZaHBtV0XNHBQQ")'
+
+          # Bowling: Telegram native bowling animation, value 1-6.
+          marker = '    # Боулинг\n'
+          start = s.index(marker)
+          end = s.index('    # Баскетбол\n', start)
+          block = s[start:end]
+          block = block.replace(
+              f'        {old}\n        await asyncio.sleep(2)\n        pins = random.randint(0, 10)',
+              '        dice_msg = await update.message.reply_dice(emoji="🎳")\n        await asyncio.sleep(3)\n        pins = dice_msg.dice.value'
+          )
+          s = s[:start] + block + s[end:]
+
+          # Basketball: Telegram native basketball animation, value 1-5.
+          start = s.index('    # Баскетбол\n')
+          end = s.index('    # Дартс\n', start)
+          block = s[start:end]
+          block = block.replace(
+              f'        {old}\n        await asyncio.sleep(2)\n        roll = random.randint(1, 10)',
+              '        dice_msg = await update.message.reply_dice(emoji="🏀")\n        await asyncio.sleep(3)\n        roll = dice_msg.dice.value'
+          )
+          s = s[:start] + block + s[end:]
+
+          # Darts: Telegram native darts animation, value 1-6.
+          start = s.index('    # Дартс\n')
+          end = s.index('    # Крестики-нолики\n', start)
+          block = s[start:end]
+          block = block.replace(
+              f'        {old}\n        await asyncio.sleep(2)\n        roll = random.randint(1, 100)',
+              '        dice_msg = await update.message.reply_dice(emoji="🎯")\n        await asyncio.sleep(3)\n        roll = dice_msg.dice.value'
+          )
+          s = s[:start] + block + s[end:]
+
+          # Generic dice game: use Telegram native dice instead of local random value.
+          start = s.index('    # Кубик\n')
+          end = s.index('    # Стаканчик\n', start)
+          block = s[start:end]
+          block = block.replace(
+              '        rolled = random.randint(1, 6)',
+              '        dice_msg = await update.message.reply_dice(emoji="🎲")\n        await asyncio.sleep(3)\n        rolled = dice_msg.dice.value'
+          )
+          s = s[:start] + block + s[end:]
+
+          p.write_text(s, encoding='utf-8')
+          PY
+          python3 -m py_compile бот.py
+      - name: Commit and remove workflow
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add бот.py
+          git commit -m 'fix: use Telegram native dice animations for games' || true
+          git push
+          git rm .github/workflows/fix_games.yml
+          git commit -m 'chore: remove temporary game fix workflow'
+          git push
