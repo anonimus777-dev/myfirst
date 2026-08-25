@@ -1,0 +1,62 @@
+name: Apply room and game fixes
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch files
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('бот.py')
+          s = p.read_text(encoding='utf-8')
+          old_id = 'CAACAgIAAxkBAAIBd2cKW4k5tN3RAAGzAAFLUPGRAAFiXQACDgADwDZIE6ZaHBtV0XNHBQQ'
+
+          replacements = [
+              (f'        sticker_msg = await update.message.reply_sticker("{old_id}")\n        await asyncio.sleep(2)\n        pins = random.randint(0, 10)',
+               '        dice_msg = await update.message.reply_dice(emoji="🎳")\n        await asyncio.sleep(3)\n        pins = dice_msg.dice.value'),
+              (f'        sticker_msg = await update.message.reply_sticker("{old_id}")\n        await asyncio.sleep(2)\n        roll = random.randint(1, 10)',
+               '        dice_msg = await update.message.reply_dice(emoji="🏀")\n        await asyncio.sleep(3)\n        roll = dice_msg.dice.value'),
+              (f'        sticker_msg = await update.message.reply_sticker("{old_id}")\n        await asyncio.sleep(2)\n        roll = random.randint(1, 100)',
+               '        dice_msg = await update.message.reply_dice(emoji="🎯")\n        await asyncio.sleep(3)\n        roll = dice_msg.dice.value'),
+          ]
+          for old, new in replacements:
+              if old not in s:
+                  raise SystemExit(f'game pattern not found: {old[-80:]}')
+              s = s.replace(old, new, 1)
+          if old_id in s:
+              raise SystemExit('old invalid sticker id remains')
+          p.write_text(s, encoding='utf-8')
+
+          p = Path('база_данных/бункер.py')
+          s = p.read_text(encoding='utf-8')
+          old = '''    if broke:\n        async with aiosqlite.connect(DB_PATH) as db:\n            await db.execute("UPDATE users SET bunker_broken = 1 WHERE user_id=?", (user_id,))\n            await db.commit()\n        # Возвращаем два значения: сообщение об улучшении и флаг пожара\n        return f"Ты улучшил(-а) '{ROOMS_DATA[room_num]['name']}' до {new_level} уровня за {fmt_smart(total_cost)} кр.", True\n\n    return (\n        f"Ты улучшил(-а) '{ROOMS_DATA[room_num]['name']}' до {new_level} уровня\\n"\n        f"за {fmt_smart(total_cost)} кр."\n    ), False\n'''
+          new = '''    cost_text = f"{fmt_bottles(total_cost / BOTTLE_TO_COINS)} 🍾" if use_bottles else f"{fmt_smart(total_cost)} кр."\n\n    if broke:\n        async with aiosqlite.connect(DB_PATH) as db:\n            await db.execute("UPDATE users SET bunker_broken = 1 WHERE user_id=?", (user_id,))\n            await db.commit()\n        return f"Ты улучшил(-а) '{ROOMS_DATA[room_num]['name']}' до {new_level} уровня за {cost_text}.", True\n\n    return (\n        f"Ты улучшил(-а) '{ROOMS_DATA[room_num]['name']}' до {new_level} уровня\\n"\n        f"за {cost_text}."\n    ), False\n'''
+          if old not in s:
+              raise SystemExit('room upgrade result pattern not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s, encoding='utf-8')
+          PY
+          python3 -m py_compile бот.py база_данных/бункер.py
+      - name: Commit changes
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add бот.py база_данных/бункер.py
+          git commit -m 'Fix native games and bottle upgrade display'
+          git push
+      - name: Remove temporary workflow
+        run: |
+          git rm .github/workflows/fix_room_games.yml
+          git commit -m 'Remove temporary room game fix workflow'
+          git push
