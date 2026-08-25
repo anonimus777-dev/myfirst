@@ -1,0 +1,43 @@
+name: Fix callback notification name
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fix callback HTML
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('база_данных/теплица.py')
+          s = p.read_text(encoding='utf-8')
+          old = 'message = f"{user_link(uid, username)}, у тебя недостаточно воды!"'
+          new = 'message = f"🙎‍♂️ {username}, у тебя недостаточно воды!"'
+          if old not in s:
+              raise SystemExit('target not found')
+          s = s.replace(old, new, 1)
+          old2 = 'f"{user_link(uid, username)}, успешно выращено: {total_crop} {crop_data[\'emoji\']}, "'
+          new2 = 'f"🙎‍♂️ {username}, успешно выращено: {total_crop} {crop_data[\'emoji\']}, "'
+          if old2 not in s:
+              raise SystemExit('success target not found')
+          s = s.replace(old2, new2, 1)
+          p.write_text(s, encoding='utf-8')
+          PY
+          python3 -m py_compile 'база_данных/теплица.py'
+      - name: Commit changes
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add 'база_данных/теплица.py'
+          git diff --cached --quiet || git commit -m 'fix: show plain name in greenhouse callback notifications'
+          git push
+      - name: Remove workflow
+        if: always()
+        run: |
+          rm -f '.github/workflows/fix-callback-name.yml'
+          git add '.github/workflows/fix-callback-name.yml'
+          git diff --cached --quiet || git commit -m 'chore: remove temporary callback fix workflow'
+          git push || true
