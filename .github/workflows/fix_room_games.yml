@@ -1,0 +1,192 @@
+name: Fix room currency and games
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Patch bot
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+
+          bot = Path('бот.py')
+          s = bot.read_text(encoding='utf-8')
+
+          # Replace the old invalid sticker-based games with Telegram native dice.
+          bowling = '''    # Боулинг
+    if text.startswith("боулинг"):
+        parts_g = raw.split()
+        if len(parts_g) < 2:
+            await update.message.reply_text(f"Пример: <code>Боулинг [ставка]</code>", parse_mode=ParseMode.HTML)
+            return
+        cd = check_cooldown(uid)
+        if cd:
+            await update.message.reply_text(f"⏳ Подождите {cd} сек.")
+            return
+        bet = parse_bet(parts_g[1], user["balance"])
+        if bet <= 0 or user["balance"] < bet:
+            await update.message.reply_text(f"{user_link(uid, user['username'])}, недостаточно крышек!", parse_mode=ParseMode.HTML)
+            return
+        set_cooldown(uid)
+        dice_msg = await update.message.reply_dice(emoji="🎳")
+        await asyncio.sleep(3)
+        pins = dice_msg.dice.value
+        if pins == 6:
+            win, desc = bet * 3, "🎳 СТРАЙК! x3"
+        elif pins == 5:
+            win, desc = int(bet * 1.5), "🎳 Отличный бросок! x1.5"
+        elif pins in (3, 4):
+            win, desc = bet, f"🎳 {pins}/6. x1 (возврат)"
+        else:
+            win, desc = 0, f"❌ {pins}/6. x0"
+        change = win - bet
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute("UPDATE users SET balance = balance - ? + ? WHERE user_id=?", (bet, win, uid))
+            await db.commit()
+        sign = "+" if change >= 0 else ""
+        await update.message.reply_text(
+            f"🎳 {user_link(uid, user['username'])}, {desc}\\n"
+            f"· · · · · · · · · · · · · · ·\\n"
+            f"💸 Ставка: {fmt_smart(bet)} кр.\\n"
+            + (f"🎉 Выигрыш: {fmt_smart(win)} кр." if change > 0 else f"📊 Итог: {sign}{fmt_smart(change)} кр."),
+            parse_mode=ParseMode.HTML
+        )
+        return
+
+'''
+          basketball = '''    # Баскетбол
+    if text.startswith("баскетбол"):
+        parts_g = raw.split()
+        if len(parts_g) < 2:
+            await update.message.reply_text(f"Пример: <code>Баскетбол [ставка]</code>", parse_mode=ParseMode.HTML)
+            return
+        cd = check_cooldown(uid)
+        if cd:
+            await update.message.reply_text(f"⏳ Подождите {cd} сек.")
+            return
+        bet = parse_bet(parts_g[1], user["balance"])
+        if bet <= 0 or user["balance"] < bet:
+            await update.message.reply_text(f"{user_link(uid, user['username'])}, недостаточно крышек!", parse_mode=ParseMode.HTML)
+            return
+        set_cooldown(uid)
+        dice_msg = await update.message.reply_dice(emoji="🏀")
+        await asyncio.sleep(3)
+        roll = dice_msg.dice.value
+        if roll == 5:
+            win, desc = bet * 2, "🏀 Попал в кольцо! x2"
+        elif roll in (3, 4):
+            win, desc = int(bet * 1.2), "🏀 Рикошет и попал! x1.2"
+        else:
+            win, desc = 0, "❌ Промах мимо кольца! x0"
+        change = win - bet
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute("UPDATE users SET balance = balance - ? + ? WHERE user_id=?", (bet, win, uid))
+            await db.commit()
+        sign = "+" if change >= 0 else ""
+        await update.message.reply_text(
+            f"🏀 {user_link(uid, user['username'])}, {desc}\\n"
+            f"· · · · · · · · · · · · · · ·\\n"
+            f"💸 Ставка: {fmt_smart(bet)} кр.\\n"
+            + (f"🎉 Выигрыш: {fmt_smart(win)} кр." if change > 0 else f"📊 Итог: {sign}{fmt_smart(change)} кр."),
+            parse_mode=ParseMode.HTML
+        )
+        return
+
+'''
+          darts = '''    # Дартс
+    if text.startswith("дартс"):
+        parts_g = raw.split()
+        if len(parts_g) < 2:
+            await update.message.reply_text(f"Пример: <code>Дартс [ставка]</code>", parse_mode=ParseMode.HTML)
+            return
+        cd = check_cooldown(uid)
+        if cd:
+            await update.message.reply_text(f"⏳ Подождите {cd} сек.")
+            return
+        bet = parse_bet(parts_g[1], user["balance"])
+        if bet <= 0 or user["balance"] < bet:
+            await update.message.reply_text(f"{user_link(uid, user['username'])}, недостаточно крышек!", parse_mode=ParseMode.HTML)
+            return
+        set_cooldown(uid)
+        dice_msg = await update.message.reply_dice(emoji="🎯")
+        await asyncio.sleep(3)
+        roll = dice_msg.dice.value
+        if roll == 6:
+            win, mult, desc = bet * 10, "x10", "меткость твоё второе имя! БУЛЛСАЙ! 🎯"
+        elif roll == 5:
+            win, mult, desc = bet * 5, "x5", "отличный бросок! 🎯"
+        elif roll == 4:
+            win, mult, desc = bet * 2, "x2", "попал! x2 🎯"
+        elif roll == 3:
+            win, mult, desc = bet, "x1", "попал рядом с центром. x1 🤨"
+        else:
+            win, mult, desc = 0, "x0", "промахнулся! x0 😱"
+        change = win - bet
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute("UPDATE users SET balance = balance - ? + ? WHERE user_id=?", (bet, win, uid))
+            await db.commit()
+        if change > 0:
+            result_line = f"🎉 Выигрыш: {fmt_smart(win)} кр."
+        elif change == 0:
+            result_line = "😐 Ставка возвращена."
+        else:
+            result_line = f"📊 Потеря: {fmt_smart(bet)} кр."
+        await update.message.reply_text(
+            f"🎯 {user_link(uid, user['username'])}, {desc}\\n"
+            f"· · · · · · · · · · · · · · ·\\n"
+            f"💸 Ставка: {fmt_smart(bet)} кр.\\n"
+            f"{result_line}",
+            parse_mode=ParseMode.HTML
+        )
+        return
+
+'''
+
+          # Use broad block boundaries so duplicate comments from older patches do not matter.
+          s, n1 = re.subn(r'    # Боулинг\n.*?(?=    # Баскетбол\n)', bowling, s, count=1, flags=re.S)
+          s, n2 = re.subn(r'    # Баскетбол\n.*?(?=    # Дартс\n)', basketball, s, count=1, flags=re.S)
+          s, n3 = re.subn(r'    # Дартс\n.*?(?=# Крестики-нолики\n)', darts, s, count=1, flags=re.S)
+          if (n1, n2, n3) != (1, 1, 1):
+              raise SystemExit(f'game blocks not found: {(n1,n2,n3)}')
+
+          # Make sure no old invalid game sticker remains in these handlers.
+          if 'CAACAgIAAxkBAAIBd2cKW4k5tN3RAAGzAAFLUPGRAAFiXQACDgADwDZIE6ZaHBtV0XNHBQQ' in s:
+              raise SystemExit('old invalid sticker id still present')
+
+          bot.write_text(s, encoding='utf-8')
+
+          # Room upgrade result must show the currency actually used.
+          bunker = Path('база_данных/бункер.py')
+          b = bunker.read_text(encoding='utf-8')
+          old = '''    if broke:\n        async with aiosqlite.connect(DB_PATH) as db:\n            await db.execute("UPDATE users SET bunker_broken = 1 WHERE user_id=?", (user_id,))\n            await db.commit()\n        # Возвращаем два значения: сообщение об улучшении и флаг пожара\n        return f"Ты улучшил(-а) '{ROOMS_DATA[room_num]['name']}' до {new_level} уровня за {fmt_smart(total_cost)} кр.", True\n\n    return (\n        f"Ты улучшил(-а) '{ROOMS_DATA[room_num]['name']}' до {new_level} уровня\\n"\n        f"за {fmt_smart(total_cost)} кр."\n    ), False\n'''
+          new = '''    cost_text = f"{fmt_bottles(total_cost / BOTTLE_TO_COINS)} 🍾" if use_bottles else f"{fmt_smart(total_cost)} кр."\n\n    if broke:\n        async with aiosqlite.connect(DB_PATH) as db:\n            await db.execute("UPDATE users SET bunker_broken = 1 WHERE user_id=?", (user_id,))\n            await db.commit()\n        return f"Ты улучшил(-а) '{ROOMS_DATA[room_num]['name']}' до {new_level} уровня за {cost_text}.", True\n\n    return (\n        f"Ты улучшил(-а) '{ROOMS_DATA[room_num]['name']}' до {new_level} уровня\\n"\n        f"за {cost_text}."\n    ), False\n'''
+          if old not in b:
+              raise SystemExit('room upgrade result block not found')
+          b = b.replace(old, new, 1)
+          bunker.write_text(b, encoding='utf-8')
+          PY
+
+      - name: Validate
+        run: |
+          python3 -m py_compile бот.py база_данных/бункер.py
+          ! grep -n 'CAACAgIAAxkBAAIBd2cKW4k5tN3RAAGzAAFLUPGRAAFiXQACDgADwDZIE6ZaHBtV0XNHBQQ' бот.py
+
+      - name: Commit and remove workflow
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add бот.py база_данных/бункер.py
+          git commit -m 'Fix native games and bottle upgrade display' || true
+          git rm .github/workflows/fix_room_games.yml
+          git commit -m 'Remove temporary fix workflow' || true
+          git push
