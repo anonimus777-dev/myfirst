@@ -871,18 +871,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         dice_msg = await update.message.reply_dice(emoji="🎳")
         await asyncio.sleep(3)
         pins = dice_msg.dice.value
-        if pins == 10:
-            mult, win = 3, bet * 3
-            desc = f"🎳 СТРАЙК! Все 10 кеглей! x3"
-        elif pins >= 7:
-            mult, win = 1.5, int(bet * 1.5)
-            desc = f"🎳 Отлично! {pins}/10 кеглей. x1.5"
-        elif pins >= 4:
-            mult, win = 1, bet
-            desc = f"😐 {pins}/10 кеглей. x1 (возврат)"
+        if pins == 6:
+            win, desc = bet * 3, "🎳 СТРАЙК! x3"
+        elif pins == 5:
+            win, desc = int(bet * 1.5), "🎳 Отличный бросок! x1.5"
+        elif pins in (3, 4):
+            win, desc = bet, f"😐 {pins}/6. x1 (возврат)"
         else:
-            mult, win = 0, 0
-            desc = f"❌ Промах. {pins}/10 кеглей. x0"
+            win, desc = 0, f"❌ {pins}/6. x0"
         change = win - bet
         async with aiosqlite.connect(DB_PATH) as db:
             await db.execute("UPDATE users SET balance = balance - ? + ? WHERE user_id=?", (bet, win, uid))
@@ -916,12 +912,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         dice_msg = await update.message.reply_dice(emoji="🏀")
         await asyncio.sleep(3)
         roll = dice_msg.dice.value
-        if roll >= 8:
-            win, desc = bet * 2, f"🏀 Попал в кольцо! x2"
-        elif roll >= 5:
-            win, desc = int(bet * 1.2), f"🏀 Рикошет и попал! x1.2"
+        if roll == 5:
+            win, desc = bet * 2, "🏀 Попал в кольцо! x2"
+        elif roll in (3, 4):
+            win, desc = int(bet * 1.2), "🏀 Рикошет и попал! x1.2"
         else:
-            win, desc = 0, f"❌ Промах мимо кольца! x0"
+            win, desc = 0, "❌ Промах мимо кольца! x0"
         change = win - bet
         async with aiosqlite.connect(DB_PATH) as db:
             await db.execute("UPDATE users SET balance = balance - ? + ? WHERE user_id=?", (bet, win, uid))
@@ -956,13 +952,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         dice_msg = await update.message.reply_dice(emoji="🎯")
         await asyncio.sleep(3)
         roll = dice_msg.dice.value
-        if roll <= 5:
+        if roll == 6:
             win, mult, desc = bet * 10, "x10", "меткость твоё второе имя! БУЛЛСАЙ! 🎯"
-        elif roll <= 20:
+        elif roll == 5:
             win, mult, desc = bet * 5, "x5", "отличный бросок! 🎯"
-        elif roll <= 45:
+        elif roll == 4:
             win, mult, desc = bet * 2, "x2", "попал! x2 🎯"
-        elif roll <= 65:
+        elif roll == 3:
             win, mult, desc = bet, "x1", "попал рядом с центром. x1 🤨"
         else:
             win, mult, desc = 0, "x0", "промахнулся! x0 😱"
@@ -971,7 +967,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await db.execute("UPDATE users SET balance = balance - ? + ? WHERE user_id=?", (bet, win, uid))
             await db.commit()
         if change > 0:
-            result_line = f"🎉 Выигрыш: {fmt_smart(win)} GPoint"
+            result_line = f"🎉 Выигрыш: {fmt_smart(win)} кр."
         elif change == 0:
             result_line = f"😐 Ставка возвращена."
         else:
