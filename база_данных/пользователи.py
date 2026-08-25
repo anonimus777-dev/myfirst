@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import aiosqlite
+import asyncio
 import random
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -12,6 +13,8 @@ from вспомогательные.вспомогательные_функци�
 )
 from вспомогательные.проверки import require_bunker
 from база_данных.база import get_user, get_total_income, get_rooms
+
+PROMO_LOCK = asyncio.Lock()
 from клавиатуры.общие import donate_keyboard, back_keyboard
 
 
@@ -181,47 +184,53 @@ async def handle_bonus(update: Update, user: dict):
 async def handle_promo(update: Update, user: dict, promo: str):
     uid = user["user_id"]
     username = user["username"] or "Игрок"
-    promo_lower = promo.lower()
-
-    if promo_lower not in PROMO_CODES:
-        await update.message.reply_text(f"{user_link(uid, username)}, такого промокода не существует!", parse_mode=ParseMode.HTML)
-        return
-
-    # Check if used
-    async with aiosqlite.connect(DB_PATH) as db:
-        async with db.execute("SELECT 1 FROM used_promos WHERE user_id=? AND promo=?", (uid, promo_lower)) as cur:
-            if await cur.fetchone():
-                await update.message.reply_text(f"{user_link(uid, username)}, этот промокод уже недействителен!", parse_mode=ParseMode.HTML)
+    promo_lower = promo.strip().lower()
+    async with PROMO_LOCK:
+        if promo_lower not in PROMO_CODES:
+            await update.message.reply_text(f"{user_link(uid, username)}, такого промокода не существует или его использования закончились!", parse_mode=ParseMode.HTML)
+            return
+        promo_data = PROMO_CODES[promo_lower]
+        reward_type = str(promo_data.get("reward_type", "")).lower()
+        amount = int(promo_data.get("amount", 0))
+        uses_left = int(promo_data.get("uses_left", 1))
+        if uses_left <= 0:
+            await update.message.reply_text("❌ У этого промокода закончились использования.")
+            return
+        async with aiosqlite.connect(DB_PATH) as db:
+            async with db.execute("SELECT 1 FROM used_promos WHERE user_id=? AND promo=?", (uid, promo_lower)) as cur:
+                if await cur.fetchone():
+                    await update.message.reply_text(f"{user_link(uid, username)}, ты уже использовал(-а) этот промокод!", parse_mode=ParseMode.HTML)
+                    return
+            if reward_type == "coins":
+                await db.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (amount, uid))
+                reward_text = f"💰 {fmt_smart(amount)} крышек"
+            elif reward_type == "bottles":
+                await db.execute("UPDATE users SET bottles = bottles + ? WHERE user_id=?", (amount, uid))
+                reward_text = f"🍾 {fmt_smart(amount)} шт."
+            elif reward_type == "rating":
+                await db.execute("UPDATE users SET rating = rating + ? WHERE user_id=?", (amount, uid))
+                reward_text = f"🏆 {fmt_smart(amount)} рейтинга"
+            elif reward_type == "bbcoins":
+                await db.execute("UPDATE users SET bb_coins = bb_coins + ? WHERE user_id=?", (amount, uid))
+                reward_text = f"🪙 {fmt_smart(amount)} BB-coins"
+            elif reward_type == "exp":
+                await db.execute("INSERT OR IGNORE INTO greenhouse (user_id) VALUES (?)", (uid,))
+                await db.execute("UPDATE greenhouse SET exp = exp + ? WHERE user_id=?", (amount, uid))
+                reward_text = f"⭐️ {fmt_smart(amount)} опыта"
+            else:
+                await update.message.reply_text("❌ Неизвестный тип награды промокода.")
                 return
-
-    promo_data = PROMO_CODES[promo_lower]
-    reward_type = promo_data["reward_type"]
-    amount = promo_data["amount"]
-
-    async with aiosqlite.connect(DB_PATH) as db:
-        if reward_type == "coins":
-            await db.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (amount, uid))
-            reward_text = f"💰 {fmt_smart(amount)} крышек"
-        elif reward_type == "bottles":
-            await db.execute("UPDATE users SET bottles = bottles + ? WHERE user_id=?", (amount, uid))
-            reward_text = f"🍾 {fmt_smart(amount)} шт."
-        elif reward_type == "rating":
-            await db.execute("UPDATE users SET rating = rating + ? WHERE user_id=?", (amount, uid))
-            reward_text = f"🏆 {fmt_smart(amount)} рейтинга"
-        elif reward_type == "bbcoins":
-            await db.execute("UPDATE users SET bb_coins = bb_coins + ? WHERE user_id=?", (amount, uid))
-            reward_text = f"🪙 {fmt_smart(amount)} BB-coins"
-        elif reward_type == "exp":
-            reward_text = f"⭐️ {fmt_smart(amount)} опыта"
+            await db.execute("INSERT INTO used_promos (user_id, promo) VALUES (?, ?)", (uid, promo_lower))
+            await db.commit()
+        uses_left -= 1
+        if uses_left <= 0:
+            PROMO_CODES.pop(promo_lower, None)
         else:
-            reward_text = f"{fmt_smart(amount)} бонусов"
+            promo_data["uses_left"] = uses_left
+    await update.message.reply_text(f"{user_link(uid, username)}, тебе начислено:
+{reward_text}
 
-        await db.execute("INSERT OR IGNORE INTO used_promos (user_id, promo) VALUES (?, ?)", (uid, promo_lower))
-        await db.commit()
-
-    await update.message.reply_text(
-        f"{user_link(uid, username)}, тебе начислено:\n{reward_text}\n\n🧡 Приятной игры! 🧡"
-    , parse_mode=ParseMode.HTML)
+🧡 Приятной игры! 🧡", parse_mode=ParseMode.HTML)
 
 
 # ── Referral ─────────────────────────────────────────────────────────────────

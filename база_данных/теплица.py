@@ -64,7 +64,7 @@ async def handle_my_greenhouse(update: Update, user: dict):
         [InlineKeyboardButton("🔀 Выбрать сорт", callback_data=f"gh_select_{uid}")],
         [InlineKeyboardButton(f"💧 Вырастить {crop_emoji}", callback_data=f"gh_grow_{uid}_1")],
     ])
-    await update.message.reply_text(text, reply_markup=kb, parse_mode=ParseMode.HTML)
+    await update.effective_message.reply_text(text, reply_markup=kb, parse_mode=ParseMode.HTML)
 
 async def handle_greenhouse_info(update: Update, user: dict):
     uid = user["user_id"]
@@ -82,7 +82,7 @@ async def handle_greenhouse_info(update: Update, user: dict):
         f"   🍅 Помидор — 100.000 опыта\n"
         f"   🍆 Баклажан — 125.000 опыта"
     )
-    await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+    await update.effective_message.reply_text(text, parse_mode=ParseMode.HTML)
 
 async def handle_greenhouse_rate(update: Update, user: dict):
     uid = user["user_id"]
@@ -100,7 +100,7 @@ async def handle_greenhouse_rate(update: Update, user: dict):
         f"   🍅 Помидор — 10,000 крышек/шт\n"
         f"   🍆 Баклажан — 20,000 крышек/шт"
     )
-    await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+    await update.effective_message.reply_text(text, parse_mode=ParseMode.HTML)
 
 async def handle_grow(update: Update, user: dict, parts_raw: list):
     uid = user["user_id"]
@@ -111,7 +111,7 @@ async def handle_grow(update: Update, user: dict, parts_raw: list):
 
     CROP_NAMES = list(CROPS.keys())
     if len(parts_raw) < 2:
-        await update.message.reply_text(
+        await update.effective_message.reply_text(
             f"🙎‍♂️ {user_link(uid, username)}, этой командой можно вырастить определённый сорт!\n"
             f"Виды культур — {', '.join(CROP_NAMES)}\n\n"
             f"Пример: <code>Вырастить [название сорта] [кол-во]</code>",
@@ -122,7 +122,7 @@ async def handle_grow(update: Update, user: dict, parts_raw: list):
     raw_crop = parts_raw[1].lower()
     crop_name = CROP_FORMS.get(raw_crop, raw_crop)
     if crop_name not in CROPS:
-        await update.message.reply_text(
+        await update.effective_message.reply_text(
             f"{user_link(uid, username)}, такого сорта нет! \n\nДоступны: {', '.join(CROP_NAMES)}",
             parse_mode=ParseMode.HTML
         )
@@ -130,7 +130,7 @@ async def handle_grow(update: Update, user: dict, parts_raw: list):
 
     crop_data = CROPS[crop_name]
     if gh["exp"] < crop_data["exp_req"]:
-        await update.message.reply_text(
+        await update.effective_message.reply_text(
             f"{user_link(uid, username)}, у тебя недостаточно опыта для выращивания {crop_name}!\n"
             f"Нужно: {fmt_smart(crop_data['exp_req'])} опыта",
             parse_mode=ParseMode.HTML
@@ -147,7 +147,7 @@ async def handle_grow(update: Update, user: dict, parts_raw: list):
     water_limit = get_vip_water_limit(vip)
     water = gh["water"]
     if water < qty:
-        await update.message.reply_text(
+        await update.effective_message.reply_text(
             f"{user_link(uid, username)}, у тебя недостаточно воды!\n"
             f"Есть: {water}/{water_limit} 💧",
             parse_mode=ParseMode.HTML
@@ -170,7 +170,7 @@ async def handle_grow(update: Update, user: dict, parts_raw: list):
 
     gh = await get_greenhouse(uid)
     water_left = gh["water"]
-    await update.message.reply_text(
+    await update.effective_message.reply_text(
         f"🙎‍♂️ {user_link(uid, username)}, ты успешно вырастил(-а) {CROP_FORMS_ACC.get(crop_name, crop_name)}!\n"
         f"Получено: {total_crop} {crop_data['emoji']}, {total_exp} опыта\n"
         f"Потрачено: {qty} 💧\n"
@@ -185,7 +185,7 @@ async def handle_sell_crop(update: Update, user: dict, parts_raw: list):
 
     CROP_NAMES = list(CROPS.keys())
     if len(parts_raw) < 2:
-        await update.message.reply_text(
+        await update.effective_message.reply_text(
             f"🙎‍♂️ {user_link(uid, username)}, этой командой можно продать плоды!\n"
             f"Курс — <code>Курс теплица</code>\n\n"
             f"Пример: <code>Продать [название] [кол-во или всё]</code>",
@@ -204,7 +204,7 @@ async def handle_sell_crop(update: Update, user: dict, parts_raw: list):
     available = gh.get(col, 0)
 
     if available <= 0:
-        await update.message.reply_text(
+        await update.effective_message.reply_text(
             f"{user_link(uid, username)}, у тебя нет {crop_name}!", parse_mode=ParseMode.HTML
         )
         return
@@ -230,7 +230,7 @@ async def handle_sell_crop(update: Update, user: dict, parts_raw: list):
         await db.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (earnings, uid))
         await db.commit()
 
-    await update.message.reply_text(
+    await update.effective_message.reply_text(
         f"🙎‍♂️ {user_link(uid, username)}, ты продал(-а) {qty} {crop_data['emoji']} {crop_name} за {fmt_smart(earnings)} кр.!",
         parse_mode=ParseMode.HTML
     )

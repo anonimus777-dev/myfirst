@@ -158,16 +158,34 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             , parse_mode=ParseMode.HTML)
             return
 
-        if parts[0].lower() == "добпромо" and len(parts) >= 4:
+        if parts[0].lower() == "добпромо":
+            if len(parts) == 1:
+                kb = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("💰 Крышки", callback_data="admin_promo_type_coins"), InlineKeyboardButton("🍾 Бутылки", callback_data="admin_promo_type_bottles")],
+                    [InlineKeyboardButton("⭐️ Опыт", callback_data="admin_promo_type_exp"), InlineKeyboardButton("🏆 Рейтинг", callback_data="admin_promo_type_rating")],
+                    [InlineKeyboardButton("🪙 BB-coins", callback_data="admin_promo_type_bbcoins")],
+                ])
+                await update.message.reply_text("Какую выберете?", reply_markup=kb)
+                return
+            if len(parts) < 4:
+                await update.message.reply_text("Формат: <code>ДобПромо код тип сумма [использований]</code>\nЕсли количество использований не указать, промокод можно использовать 1 раз.", parse_mode=ParseMode.HTML)
+                return
             promo_code_new = parts[1].lower()
             reward_t = parts[2].lower()
+            if reward_t not in {"coins", "bottles", "rating", "bbcoins", "exp"}:
+                await update.message.reply_text("❌ Неизвестный тип награды.")
+                return
             try:
                 reward_a = int(parts[3])
-            except:
-                await update.message.reply_text("Укажите число для суммы.")
+                uses = int(parts[4]) if len(parts) >= 5 else 1
+            except ValueError:
+                await update.message.reply_text("Сумма и количество использований должны быть числами.")
                 return
-            PROMO_CODES[promo_code_new] = {"reward_type": reward_t, "amount": reward_a}
-            await update.message.reply_text(f"✅ Промокод '{promo_code_new}' добавлен: {reward_t} x{reward_a}.", parse_mode=ParseMode.HTML)
+            if reward_a <= 0 or uses <= 0:
+                await update.message.reply_text("Сумма и количество использований должны быть больше нуля.")
+                return
+            PROMO_CODES[promo_code_new] = {"reward_type": reward_t, "amount": reward_a, "uses_left": uses}
+            await update.message.reply_text(f"✅ Промокод '{promo_code_new}' добавлен: {reward_t} ×{reward_a}.\n👥 Использований: {uses} (один пользователь — только 1 раз).", parse_mode=ParseMode.HTML)
             return
 
     if not await user_exists(uid):
@@ -1335,6 +1353,27 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"{result_text}"
             )
             await query.message.edit_text(text, parse_mode=ParseMode.HTML)
+
+    elif data.startswith("gh_grow_"):
+        parts = data.split("_")
+        try:
+            uid2 = int(parts[2])
+            qty = int(parts[3]) if len(parts) > 3 else 1
+        except (ValueError, IndexError):
+            await query.answer("Некорректная кнопка.", show_alert=True)
+            return
+        if uid2 != uid:
+            await query.answer("Это не твоя теплица!", show_alert=True)
+            return
+        user2 = await get_user(uid)
+        if not user2:
+            await query.answer("Игрок не найден.", show_alert=True)
+            return
+        await query.answer()
+        await ensure_greenhouse(uid)
+        gh = await get_greenhouse(uid)
+        selected = gh.get("selected_crop") or "картошка"
+        await handle_grow(update, user2, ["вырастить", selected, str(qty)])
 
     elif data.startswith("gh_select_"):
         await query.answer()
