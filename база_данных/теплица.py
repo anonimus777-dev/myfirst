@@ -281,3 +281,19 @@ async def handle_choose_crop_callback(update: Update, context: ContextTypes.DEFA
         await db.execute("UPDATE greenhouse SET selected_crop=? WHERE user_id=?", (crop, uid))
         await db.commit()
     await query.message.reply_text(f"✅ Выбран сорт: {CROPS[crop]['emoji']} {crop.capitalize()}")
+
+
+# ── Автовосполнение воды ─────────────────────────────────────────────────────
+
+async def water_refill_job(context: ContextTypes.DEFAULT_TYPE):
+    """Добавляет 1 воду каждые 10 минут, не превышая VIP-лимит."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute("SELECT user_id, vip FROM users") as cur:
+            all_users = await cur.fetchall()
+        for uid, vip in all_users:
+            water_limit = get_vip_water_limit(vip)
+            await db.execute(
+                "UPDATE greenhouse SET water = MIN(water + 1, ?) WHERE user_id=?",
+                (water_limit, uid)
+            )
+        await db.commit()
