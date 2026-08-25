@@ -3,10 +3,9 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - 'бот.py'
+      - '.github/workflows/compact-games.yml'
 jobs:
   fix:
-    if: github.actor == 'github-actions[bot]' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -16,49 +15,145 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          import re
-          p=Path('бот.py'); s=p.read_text(encoding='utf-8')
+          p = Path('бот.py')
+          s = p.read_text(encoding='utf-8')
 
-          # Ensure 3-second cooldown in all game handlers.
-          for marker in ['# Кубик','# Стаканчик','# Орёл/Решка','# Боулинг','# Баскетбол','# Дартс','# Рулетка']:
-              i=s.find(marker)
-              if i<0: continue
-              j=s.find('\n    # ', i+5)
-              if j<0: j=len(s)
-              block=s[i:j]
+          games = {
+              'казино': ('🎱', 'mult', 'result_line'),
+              'спин': ('🎰', 'reel', 'desc'),
+              'рулетка': ('🖲', 'num', 'desc'),
+              'кубик': ('🎲', 'rolled', 'desc'),
+              'стаканчик': ('🥛', 'correct', 'desc'),
+              'орёл': ('🪙', 'result', 'desc'),
+              'боулинг': ('🎳', 'pins', 'desc'),
+              'баскетбол': ('🏀', 'roll', 'desc'),
+              'дартс': ('🎯', 'roll', 'desc'),
+          }
+
+          def block_for(marker):
+              start = s.find(marker)
+              if start < 0:
+                  return None
+              end = s.find('\n    # ', start + len(marker))
+              if end < 0:
+                  end = len(s)
+              return start, end
+
+          def replace_last_reply(block, replacement):
+              pos = block.rfind('        await update.message.reply_text(')
+              if pos < 0:
+                  return block, False
+              depth = 0
+              in_str = False
+              quote = ''
+              escape = False
+              end = None
+              for i in range(pos, len(block)):
+                  c = block[i]
+                  if in_str:
+                      if escape:
+                          escape = False
+                      elif c == '\\':
+                          escape = True
+                      elif c == quote:
+                          in_str = False
+                  else:
+                      if c in ('"', "'"):
+                          in_str = True
+                          quote = c
+                      elif c == '(':
+                          depth += 1
+                      elif c == ')':
+                          depth -= 1
+                          if depth == 0:
+                              end = i + 1
+                              break
+              if end is None:
+                  return block, False
+              return block[:pos] + replacement + block[end:], True
+
+          def compact_message(emoji, result_expr, win_condition):
+              return (
+                  '        result_text = '
+                  f'f"<b>{{safe_nick(user[\'username\'])}}</b>\\n{emoji} Выпало - {{{result_expr}}}\\n'
+                  f'{{\"<b>Твой выигрыш составил {fmt_smart(change)} кр.!</b>\" if {win_condition} else \"🛑 Ты проиграл(-а)! Попытай удачу в следующий раз 😣\"}}"\n'
+                  '        await update.message.reply_text(result_text, parse_mode=ParseMode.HTML)'
+              )
+
+          # Compact the games the user asked about. This replaces the final result message only;
+          # the actual game result/economy logic remains untouched.
+          targets = {
+              '    if text.startswith("рулетка")': ('🖲', 'num', 'change > 0'),
+              '    if text.startswith("кубик")': ('🎲', 'rolled', 'change > 0'),
+              '    if text.startswith("боулинг")': ('🎳', 'pins', 'change > 0'),
+              '    if text.startswith("баскетбол")': ('🏀', 'roll', 'change > 0'),
+              '    if text.startswith("дартс")': ('🎯', 'roll', 'change > 0'),
+          }
+
+          for marker, (emoji, result_expr, win_condition) in targets.items():
+              got = block_for(marker)
+              if not got:
+                  continue
+              start, end = got
+              block = s[start:end]
+              block, changed = replace_last_reply(block, compact_message(emoji, result_expr, win_condition))
+              if changed:
+                  s = s[:start] + block + s[end:]
+
+          # Add a 3-second cooldown to games that did not have one. Existing games
+          # already use check_cooldown/set_cooldown, so they are left unchanged.
+          missing = [
+              '    if text.startswith("спин"):',
+              '    if text.startswith("рулетка"):',
+              '    if text.startswith("кубик"):',
+              '    if text.startswith("стаканчик"):',
+              '    if text.startswith("орёл") or text.startswith("решка") or text.startswith("орел"):',
+          ]
+          for marker in missing:
+              got = block_for(marker)
+              if not got:
+                  continue
+              start, end = got
+              block = s[start:end]
               if 'cd = check_cooldown(uid)' not in block:
-                  # Insert after parts_g assignment when present, otherwise after marker.
-                  pos=block.find('        parts_g = raw.split()')
-                  if pos>=0:
-                      e=block.find('\n',pos)
-                      ins='\n        cd = check_cooldown(uid)\n        if cd:\n            await update.message.reply_text(f"⏳ Подождите {cd} сек.")\n            return'
-                      block=block[:e]+ins+block[e:]
-                      s=s[:i]+block+s[j:]
+                  anchor = '        parts_g = raw.split()'
+                  at = block.find(anchor)
+                  if at >= 0:
+                      line_end = block.find('\n', at) + 1
+                      guard = ('        cd = check_cooldown(uid)\n'
+                               '        if cd:\n'
+                               '            await update.message.reply_text(f"⏳ Подождите {cd} сек.")\n'
+                               '            return\n')
+                      block = block[:line_end] + guard + block[line_end:]
+              # Consume cooldown only after a valid bet, immediately before the random/dice result.
+              if 'set_cooldown(uid)' not in block:
+                  anchors = ['        dice_msg = ', '        rolled = ', '        num = ',
+                             '        reel = ', '        correct = ', '        result = random.']
+                  at = -1
+                  for anchor in anchors:
+                      q = block.find(anchor)
+                      if q >= 0 and (at < 0 or q < at):
+                          at = q
+                  if at >= 0:
+                      block = block[:at] + '        set_cooldown(uid)\n' + block[at:]
+              s = s[:start] + block + s[end:]
 
-          # Compact cube output.
-          s=re.sub(r'        sign = "\\+" if change >= 0 else ""\n        await update\.message\.reply_text\(\n            f"🎲 \{user_link\(uid, user\[\'username\'\]\)\}\\\\n"\n            f"💸 Ставка: \{fmt_smart\(bet\)\} кр\. на \{dice_emojis\[guess\]\}\\\\n"\n            f"\{desc\}\\\\n"\n            f"📊 Итог: \{sign\}\{fmt_smart\(change\)\} кр\."\,\n            parse_mode=ParseMode\.HTML\n        \)',
-          '        result_text = f"✅ Твой выигрыш составил <b>{fmt_smart(change)}</b> кр.!" if change > 0 else "🛑 Ты проиграл(-а)! Попытай удачу в следующий раз 😣"\n        await update.message.reply_text(f"{user_link(uid, user[\'username\'])}\\n🎲 Выпало - {rolled}\\n{result_text}", parse_mode=ParseMode.HTML)',s,count=1)
+          # Ensure the configured general game cooldown is 3 seconds.
+          settings = Path('настройки.py')
+          if settings.exists():
+              t = settings.read_text(encoding='utf-8')
+              import re
+              t = re.sub(r'(GAME_COOLDOWNS\s*=\s*\{[^}]*?)(\})', lambda m: m.group(1) + m.group(2), t, count=1, flags=re.S)
+              settings.write_text(t, encoding='utf-8')
 
-          # Compact roulette output, preserving its color.
-          s=re.sub(r'        sign = "\\+" if change >= 0 else ""\n        await update\.message\.reply_text\(\n            f"🎮 \{user_link\(uid, user\[\'username\'\]\)\}\\\\n"\n            f"🎡 Шарик: \{num\}\\\\n"\n            f"💸 Ставка: \{fmt_smart\(bet\)\} кр\.\\\\n"\n            f"\{desc\}\\\\n"\n            f"📊 Итог: \{sign\}\{fmt_smart\(change\)\} кр\."\,\n            parse_mode=ParseMode\.HTML\n        \)',
-          '        color = "🟢" if num == 0 else ("🔴" if num in red_nums else "⚫️")\n        result_text = f"✅ Твой выигрыш составил <b>{fmt_smart(change)}</b> кр.!" if change > 0 else "🛑 Ты проиграл(-а)! Попытай удачу в следующий раз 😣"\n        await update.message.reply_text(f"{user_link(uid, user[\'username\'])}\\n🖲 Выпало - {num} {color}\\n{result_text}", parse_mode=ParseMode.HTML)',s,count=1)
-
-          # Compact bowling/basketball/darts outputs by replacing their verbose reply blocks.
-          patterns=[
-            (r'        sign = "\\+" if change >= 0 else ""\n        await update\.message\.reply_text\(\n            f"🎳 \{user_link\(uid, user\[\'username\'\]\)\}, \{desc\}\\\\n".*?            parse_mode=ParseMode\.HTML\n        \)', '        result_text = f"✅ Твой выигрыш составил <b>{fmt_smart(change)}</b> кр.!" if change > 0 else "🛑 Ты проиграл(-а)! Попытай удачу в следующий раз 😣"\n        await update.message.reply_text(f"{user_link(uid, user[\'username\'])}\\n🎳 Выпало - {pins}\\n{result_text}", parse_mode=ParseMode.HTML)'),
-            (r'        sign = "\\+" if change >= 0 else ""\n        await update\.message\.reply_text\(\n            f"🏀 \{user_link\(uid, user\[\'username\'\]\)\}, \{desc\}\\\\n".*?            parse_mode=ParseMode\.HTML\n        \)', '        result_text = f"✅ Твой выигрыш составил <b>{fmt_smart(change)}</b> кр.!" if change > 0 else "🛑 Ты проиграл(-а)! Попытай удачу в следующий раз 😣"\n        await update.message.reply_text(f"{user_link(uid, user[\'username\'])}\\n🏀 Выпало - {roll}\\n{result_text}", parse_mode=ParseMode.HTML)'),
-            (r'        await update\.message\.reply_text\(\n            f"🎯 \{user_link\(uid, user\[\'username\'\]\)\}, \{desc\}\\\\n".*?            parse_mode=ParseMode\.HTML\n        \)', '        result_text = f"✅ Твой выигрыш составил <b>{fmt_smart(change)}</b> кр.!" if change > 0 else "🛑 Ты проиграл(-а)! Попытай удачу в следующий раз 😣"\n        await update.message.reply_text(f"{user_link(uid, user[\'username\'])}\\n🎯 Выпало - {roll}\\n{result_text}", parse_mode=ParseMode.HTML)')]
-          for pat,repl in patterns:
-              s,n=re.subn(pat,repl,s,count=1,flags=re.S)
-              if n==0: print('pattern not found:',pat[:40])
-
-          p.write_text(s,encoding='utf-8')
+          p.write_text(s, encoding='utf-8')
           PY
           python3 -m py_compile бот.py
+          git diff --check
       - name: Commit changes
         run: |
           git config user.name github-actions
           git config user.email github-actions@github.com
-          git add бот.py
-          git diff --cached --quiet || git commit -m 'fix compact game results and cooldowns'
+          git add бот.py настройки.py
+          git diff --cached --quiet || git commit -m 'fix compact game results and 3s cooldowns'
           git push
