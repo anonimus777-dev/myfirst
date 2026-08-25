@@ -1113,25 +1113,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception:
                 pass
 
-        # ⚠️ ВНИМАНИЕ: в оригинальном bot.py тут используется необъявленная переменная
-        # `levels` (баг, унаследованный при переносе — не появился из-за разбивки на файлы).
-        # Похоже, этот блок кулдауна на самом деле относится к ветке "room_up_" ниже
-        # и сюда попал по ошибке. Нужно решить: либо убрать этот блок отсюда,
-        # либо взять `levels` из data (например, распарсить количество уровней апгрейда).
-        cd_seconds = get_room_upgrade_cd(user.get("vip", 0), levels)
-        if cd_seconds > 0:
-            cd_key = (uid, room_num, levels)
-            last_upgrade = ROOM_UPGRADE_COOLDOWNS.get(cd_key, 0)
-            elapsed = time.time() - last_upgrade
-            if elapsed < cd_seconds:
-                remaining = int(cd_seconds - elapsed) + 1
-                mins = remaining // 60
-                secs = remaining % 60
-                wait_str = f"{mins} мин. {secs} сек." if mins else f"{secs} сек."
-                await query.answer(f"⏳ Подождите {wait_str}!", show_alert=True)
-                return
-            ROOM_UPGRADE_COOLDOWNS[cd_key] = time.time()
-
     elif data.startswith("dig_do_"):
         uid2 = int(data[7:])
         if uid2 != uid:
@@ -1184,6 +1165,25 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         room_num = int(parts[2])
         levels = int(parts[3])
         use_bottles = context.user_data.get(f"room_{room_num}_bottles", False)
+
+        # Проверка кулдауна на прокачку (раньше этот код был в ветке
+        # "room_currency_" и падал с ошибкой, т.к. там нет `levels` —
+        # перенесено сюда, где `levels` определена и где кулдаун реально нужен).
+        user_cd = await get_user(uid)
+        cd_seconds = get_room_upgrade_cd(user_cd.get("vip", 0), levels)
+        if cd_seconds > 0:
+            cd_key = (uid, room_num, levels)
+            last_upgrade = ROOM_UPGRADE_COOLDOWNS.get(cd_key, 0)
+            elapsed = time.time() - last_upgrade
+            if elapsed < cd_seconds:
+                remaining = int(cd_seconds - elapsed) + 1
+                mins = remaining // 60
+                secs = remaining % 60
+                wait_str = f"{mins} мин. {secs} сек." if mins else f"{secs} сек."
+                await query.answer(f"⏳ Подождите {wait_str}!", show_alert=True)
+                return
+            ROOM_UPGRADE_COOLDOWNS[cd_key] = time.time()
+
         result_data = await do_room_upgrade(uid, room_num, levels, use_bottles)
         if isinstance(result_data, tuple):
             result, fire = result_data
