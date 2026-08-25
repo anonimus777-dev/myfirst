@@ -7,6 +7,7 @@ on:
 
 jobs:
   fix:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -19,27 +20,27 @@ jobs:
           p = Path('бот.py')
           s = p.read_text(encoding='utf-8')
           old = 'sticker_msg = await update.message.reply_sticker("CAACAgIAAxkBAAIBd2cKW4k5tN3RAAGzAAFLUPGRAAFiXQACDgADwDZIE6ZaHBtV0XNHBQQ")'
-          start = s.index('    # Боулинг\n'); end = s.index('    # Баскетбол\n', start); block = s[start:end]
-          block = block.replace(f'        {old}\n        await asyncio.sleep(2)\n        pins = random.randint(0, 10)', '        dice_msg = await update.message.reply_dice(emoji="🎳")\n        await asyncio.sleep(3)\n        pins = dice_msg.dice.value')
-          s = s[:start] + block + s[end:]
-          start = s.index('    # Баскетбол\n'); end = s.index('    # Дартс\n', start); block = s[start:end]
-          block = block.replace(f'        {old}\n        await asyncio.sleep(2)\n        roll = random.randint(1, 10)', '        dice_msg = await update.message.reply_dice(emoji="🏀")\n        await asyncio.sleep(3)\n        roll = dice_msg.dice.value')
-          s = s[:start] + block + s[end:]
-          start = s.index('    # Дартс\n'); end = s.index('    # Крестики-нолики\n', start); block = s[start:end]
-          block = block.replace(f'        {old}\n        await asyncio.sleep(2)\n        roll = random.randint(1, 100)', '        dice_msg = await update.message.reply_dice(emoji="🎯")\n        await asyncio.sleep(3)\n        roll = dice_msg.dice.value')
-          s = s[:start] + block + s[end:]
-          start = s.index('    # Кубик\n'); end = s.index('    # Стаканчик\n', start); block = s[start:end]
-          block = block.replace('        rolled = random.randint(1, 6)', '        dice_msg = await update.message.reply_dice(emoji="🎲")\n        await asyncio.sleep(3)\n        rolled = dice_msg.dice.value')
-          s = s[:start] + block + s[end:]
+          def patch(start_marker, end_marker, old_line, new_line):
+              global s
+              start = s.index(start_marker)
+              end = s.index(end_marker, start)
+              block = s[start:end]
+              if old_line not in block:
+                  raise SystemExit(f'Expected game code not found: {start_marker}')
+              block = block.replace(old_line, new_line, 1)
+              s = s[:start] + block + s[end:]
+          patch('    # Боулинг', '    # Баскетбол', f'        {old}\n        await asyncio.sleep(2)\n        pins = random.randint(0, 10)', '        dice_msg = await update.message.reply_dice(emoji="🎳")\n        await asyncio.sleep(3)\n        pins = dice_msg.dice.value')
+          patch('    # Баскетбол', '    # Дартс', f'        {old}\n        await asyncio.sleep(2)\n        roll = random.randint(1, 10)', '        dice_msg = await update.message.reply_dice(emoji="🏀")\n        await asyncio.sleep(3)\n        roll = dice_msg.dice.value')
+          patch('    # Дартс', '    # Крестики-нолики', f'        {old}\n        await asyncio.sleep(2)\n        roll = random.randint(1, 100)', '        dice_msg = await update.message.reply_dice(emoji="🎯")\n        await asyncio.sleep(3)\n        roll = dice_msg.dice.value')
           p.write_text(s, encoding='utf-8')
           PY
           python3 -m py_compile бот.py
-      - name: Commit and remove workflow
+      - name: Commit fix and remove workflow
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add бот.py
-          git commit -m 'fix: use Telegram native dice animations for games' || true
+          git diff --cached --quiet || git commit -m 'fix: use Telegram native game results'
           git push
           git rm .github/workflows/fix_games.yml
           git commit -m 'chore: remove temporary game fix workflow'
