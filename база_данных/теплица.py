@@ -146,8 +146,7 @@ async def handle_grow(update: Update, user: dict, parts_raw: list):
     water_limit = get_vip_water_limit(vip)
     water = gh["water"]
     if water < qty:
-        # CallbackQuery.answer() does not parse HTML. Use plain username here.
-        message = f"🙎‍♂️ {username}, у тебя недостаточно воды!"
+        message = f"{username}, у тебя недостаточно воды!"
         if update.callback_query:
             await update.callback_query.answer(message, show_alert=False)
         else:
@@ -219,49 +218,66 @@ async def handle_sell_crop(update: Update, user: dict, parts_raw: list):
         )
         return
 
-    if len(parts_raw) >= 3:
-        if parts_raw[2].lower() == "всё" or parts_raw[2].lower() == "все":
+    if len(parts_raw) < 3:
+        qty = available
+    else:
+        raw_qty = parts_raw[2].lower()
+        if raw_qty in ("всё", "все", "all"):
             qty = available
         else:
             try:
-                qty = int(parts_raw[2])
+                qty = int(raw_qty)
             except:
-                qty = 1
-    else:
-        qty = available
+                qty = 0
 
-    qty = min(qty, available)
-    earnings = qty * crop_data["sell_price"]
+    if qty <= 0 or qty > available:
+        return
 
+    total = qty * crop_data["price"]
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
-            f"UPDATE greenhouse SET {col} = {col} - ? WHERE user_id=?", (qty, uid)
+            f"UPDATE greenhouse SET {col} = {col} - ? WHERE user_id=?",
+            (qty, uid)
         )
-        await db.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (earnings, uid))
+        await db.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (total, uid))
         await db.commit()
 
     await update.effective_message.reply_text(
-        f"🙎‍♂️ {user_link(uid, username)}, ты продал(-а) {qty} {crop_data['emoji']} {crop_name} за {fmt_smart(earnings)} кр.!",
+        f"{user_link(uid, username)}, продано: {qty} {crop_data['emoji']} {crop_name}.\n"
+        f"Получено: 💰 {fmt_smart(total)} крышек",
         parse_mode=ParseMode.HTML
     )
 
+async def handle_select_crop_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    uid = int(query.data.split("_")[-1])
+    user = await get_user(uid)
+    if not user:
+        return
+    gh = await get_greenhouse(uid)
+    exp = gh["exp"]
+    available = get_available_crops(exp)
+    buttons = []
+    row = []
+    for crop in available:
+        row.append(InlineKeyboardButton(f"{CROPS[crop]['emoji']} {crop.capitalize()}", callback_data=f"gh_choose_{uid}_{crop}"))
+        if len(row) == 2:
+            buttons.append(row)
+            row = []
+    if row:
+        buttons.append(row)
+    await query.message.reply_text("🔀 Выбери сорт:", reply_markup=InlineKeyboardMarkup(buttons))
 
-# ── Шахта ─────────────────────────────────────────────────────────────────────
-
-async def water_refill_job(context: ContextTypes.DEFAULT_TYPE):
-    """Добавляет 1 воду каждые 10 минут, не превышая лимит."""
+async def handle_choose_crop_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    parts = query.data.split("_")
+    uid = int(parts[2])
+    crop = "_".join(parts[3:])
+    if crop not in CROPS:
+        return
     async with aiosqlite.connect(DB_PATH) as db:
-        async with db.execute("SELECT user_id FROM users") as cur:
-            all_users = await cur.fetchall()
-        for (uid,) in all_users:
-            async with db.execute("SELECT vip FROM users WHERE user_id=?", (uid,)) as cur2:
-                row = await cur2.fetchone()
-            if not row:
-                continue
-            vip = row[0]
-            water_limit = get_vip_water_limit(vip)
-            await db.execute(
-                "UPDATE greenhouse SET water = MIN(water + 1, ?) WHERE user_id=?",
-                (water_limit, uid)
-            )
+        await db.execute("UPDATE greenhouse SET selected_crop=? WHERE user_id=?", (crop, uid))
         await db.commit()
+    await query.message.reply_text(f"✅ Выбран сорт: {CROPS[crop]['emoji']} {crop.capitalize()}")
