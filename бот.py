@@ -1226,7 +1226,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parts = data.split("_")
         room_num = int(parts[2])
         levels = int(parts[3])
-        use_bottles = context.user_data.get(f"room_{room_num}_bottles", False)
+        use_bottles = (len(parts) >= 5 and parts[4] == "bottles") or context.user_data.get(f"room_{room_num}_bottles", False)
 
         # Проверка кулдауна на прокачку (раньше этот код был в ветке
         # "room_currency_" и падал с ошибкой, т.к. там нет `levels` —
@@ -1251,21 +1251,16 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             result, fire = result_data
         else:
             result, fire = result_data, False
-        if result:
-            await query.answer(result[:200])
-        else:
-            await query.answer()
         if fire:
-            try:
-                chat_id = query.message.chat_id
-                await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=f"🔥 {user_link(uid, (await get_user(uid))['username'])}, в бункере произошёл пожар!\n"
-                         f"Напиши <code>Починить бункер</code> для починки.",
-                    parse_mode=ParseMode.HTML
-                )
-            except:
-                pass
+            fire_user = await get_user(uid)
+            fire_name = fire_user["username"] or "Игрок"
+            await query.answer(
+                f"🔥 {fire_name}, в бункере пожар! Напиши Починить бункер для починки.",
+                show_alert=False
+            )
+        else:
+            if result:
+                await query.answer(result[:200])
         user = await get_user(uid)
         vip = user.get("vip", 0)
         text = await build_room_text(uid, room_num, use_bottles)

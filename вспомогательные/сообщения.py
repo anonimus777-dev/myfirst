@@ -133,6 +133,10 @@ async def build_top_text(user_id: int, category: str) -> str:
     user = await get_user(user_id)
     username = user["username"] or "Игрок"
 
+    def short_nick(name):
+        name = name or "Игрок"
+        return name if len(name) <= 10 else name[:10] + "..."
+
     cat_config = {
         "rating":     ("🏆 Рейтинг", "рейтинга", "rating", "🏆"),
         "income":     ("💵 Доход", "кр/час", None, "💵"),
@@ -178,9 +182,9 @@ async def build_top_text(user_id: int, category: str) -> str:
         for i, row in enumerate(top_rows, 1):
             uid2, uname2, exp2 = row
             medal = medals.get(i, "🏆")
-            lines.append(f"{i}. {medal} {uname2 or 'Игрок'} — {fmt_smart(exp2)} опыта")
+            lines.append(f"{i}. {medal} {short_nick(uname2 or 'Игрок')} — {fmt_smart(exp2)} опыта")
         lines.append("\n───────────────")
-        lines.append(f"{user_rank}. 🎖 {user_link(user_id, username)} — {fmt_smart(user_exp)} опыта")
+        lines.append(f"{user_rank}. 🎖 {user_link(user_id, short_nick(username))} — {fmt_smart(user_exp)} опыта")
         return "\n".join(lines)
 
     async with aiosqlite.connect(DB_PATH) as db:
@@ -235,10 +239,10 @@ async def build_top_text(user_id: int, category: str) -> str:
     for i, row in enumerate(top_rows, 1):
         uid2, uname2, val = row[0], row[1] or "Игрок", row[2] or 0
         medal = medals.get(i, "🏆")
-        lines.append(f"{i}. {medal} {uname2} — {fmt_val(val)} {unit}")
+        lines.append(f"{i}. {medal} {short_nick(uname2)} — {fmt_val(val)} {unit}")
 
     lines.append("\n───────────────")
-    lines.append(f"{user_rank}. 🎖 {user_link(user_id, username)} — {fmt_val(user_val_field)} {unit}")
+    lines.append(f"{user_rank}. 🎖 {user_link(user_id, short_nick(username))} — {fmt_val(user_val_field)} {unit}")
 
     return "\n".join(lines)
 
