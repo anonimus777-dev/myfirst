@@ -1,0 +1,48 @@
+name: Fix keyboard imports
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: ${{ github.event.head_commit.message != 'chore: fix keyboard imports [skip ci]' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Replace old keyboard module imports
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          changed = []
+          for path in Path('.').rglob('*.py'):
+              text = path.read_text(encoding='utf-8')
+              new_text = text.replace('клавиатуры.общее', 'клавиатуры.общие')
+              if new_text != text:
+                  path.write_text(new_text, encoding='utf-8')
+                  changed.append(str(path))
+
+          print('Changed files:')
+          for path in changed:
+              print(path)
+          PY
+
+      - name: Commit replacements and remove temporary workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes found"
+            exit 0
+          fi
+          git commit -m 'chore: fix keyboard imports [skip ci]'
+          git rm .github/workflows/fix-keyboard-imports.yml
+          git commit -m 'chore: remove temporary import fixer [skip ci]'
+          git push
