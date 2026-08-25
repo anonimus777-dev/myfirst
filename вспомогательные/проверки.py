@@ -4,7 +4,7 @@ import aiosqlite
 from telegram import Update
 from telegram.constants import ParseMode
 from настройки import DB_PATH
-from клавиатуры.общее import no_bunker_keyboard
+from клавиатуры.общие import no_bunker_keyboard
 
 
 async def require_bunker(update: Update) -> bool:
