@@ -1,0 +1,56 @@
+name: Fix fuel purchase UI
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: ${{ github.event.head_commit.message != 'fix: fuel purchase UI' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Restore economy file and patch fuel
+        run: |
+          git checkout 9324a505f4ef12d067e0707771815824fcee99ca -- 'сервисы/экономика.py'
+          python3 - <<'PY'
+          from pathlib import Path
+
+          # Restore the full original economy.py from the parent commit,
+          # then change only the fuel screen buttons.
+          p = Path('сервисы/экономика.py')
+          s = p.read_text(encoding='utf-8')
+          old = '''    kb = InlineKeyboardMarkup([\n        [InlineKeyboardButton(f"🛢 Купить до полного бака ({fmt_smart(int(need_full))} кр.)",\n                              callback_data=f"fuel_full_{uid}")],\n        [InlineKeyboardButton(f"⛽️ Купить на 1 час ({fmt_smart(fuel_per_hour)} кр.)",\n                              callback_data=f"fuel_hour_{uid}")],\n    ])'''
+          new = '''    kb = InlineKeyboardMarkup([\n        [InlineKeyboardButton("Купить бензин", callback_data=f"fuel_full_{uid}")],\n        [InlineKeyboardButton(f"Купить бензин {fmt_smart(int(need_hour))} л.", callback_data=f"fuel_hour_{uid}")],\n    ])'''
+          if old not in s:
+              raise SystemExit('fuel buttons block not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s, encoding='utf-8')
+
+          # Change callback behavior in бот.py. The result is shown only in
+          # the Telegram callback toast; the fuel message itself stays as the
+          # oil-storage screen and only its inline keyboard disappears.
+          p = Path('бот.py')
+          s = p.read_text(encoding='utf-8')
+          start = s.index('    elif data.startswith("fuel_full_") or data.startswith("fuel_hour_"):')
+          end = s.index('    elif data.startswith("room_currency_"):', start)
+          new_block = '''    elif data.startswith("fuel_full_") or data.startswith("fuel_hour_"):\n        uid2 = int(data.split("_")[2])\n        if uid2 != uid:\n            await query.answer("Это не твой бункер!", show_alert=True)\n            return\n\n        user2 = await get_user(uid)\n        total_income = await get_total_income(uid)\n        fuel_per_hour = max(1, total_income // 5)\n        max_fuel = fuel_per_hour * 12\n        current_fuel = int(user2.get("fuel", 0))\n\n        if data.startswith("fuel_full_"):\n            need = max(0, max_fuel - current_fuel)\n        else:\n            need = max(0, min(fuel_per_hour, max_fuel - current_fuel))\n\n        if need <= 0:\n            await query.answer("У вас почти полный запас бензина!")\n            return\n\n        if user2["balance"] < need:\n            await query.answer("У вас недостаточно крышек!")\n            return\n\n        async with aiosqlite.connect(DB_PATH) as db:\n            await db.execute(\n                "UPDATE users SET balance = balance - ?, fuel = fuel + ? WHERE user_id=?",\n                (need, need, uid)\n            )\n            await db.commit()\n\n        new_fuel = current_fuel + need\n        text = (\n            f"{user_link(uid, user2['username'])}\\n"\n            f"🛢 Нефтехранилище\\n\\n"\n            f"⛽️ Твой текущий запас бензина: {fmt_smart(new_fuel)}/{fmt_smart(max_fuel)} л.\\n"\n            f"🪫 Расход: {fmt_smart(fuel_per_hour)} л./час\\n"\n            f"💵 Цена за литр: 1 крышка"\n        )\n\n        if data.startswith("fuel_full_"):\n            toast = "Ты успешно пополнил бензин до полного бака!"\n        else:\n            toast = "Бензин успешно куплен!"\n\n        await query.answer(toast)\n        await query.message.edit_text(text, reply_markup=None, parse_mode=ParseMode.HTML)\n\n'''
+          s = s[:start] + new_block + s[end:]
+          p.write_text(s, encoding='utf-8')
+          PY
+
+      - name: Validate and commit
+        run: |
+          python3 -m py_compile 'бот.py' 'сервисы/экономика.py'
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add 'бот.py' 'сервисы/экономика.py'
+          git rm '.github/workflows/fix_fuel.yml'
+          git commit -m 'fix: fuel purchase UI'
+          git push
