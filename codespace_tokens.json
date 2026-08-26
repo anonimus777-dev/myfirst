@@ -1,0 +1,14 @@
+{
+  "accounts": [
+    {
+      "name": "Основной",
+      "token": "github_pat_...",
+      "repo": "anonimus777-dev/myfirst",
+      "active": false,
+      "started_at": null,
+      "codespace_name": null,
+      "used_seconds": 0
+    }
+  ],
+  "current_account": 0
+}
