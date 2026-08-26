@@ -1,0 +1,139 @@
+name: Apply game message fixes
+
+on:
+  push:
+    paths:
+      - '.github/workflows/apply_game_fixes.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch bot.py
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          p = Path('бот.py')
+          s = p.read_text(encoding='utf-8')
+
+          # 21 / Очко: bare command must show the standard error instead of doing nothing.
+          old = '''    if text == "очко" or text == "21" or text.startswith("очко ") or text.startswith("21 "):
+          parts_o = raw.split()
+          if len(parts_o) >= 2:
+              bet = parse_bet(parts_o[1], user["balance"])
+              if bet > 0:
+                  await handle_ochko_start(update, user, bet)
+              else:
+                  await update.message.reply_text(
+                      f"Пример: <code>Очко [ставка]</code> или <code>21 [ставка]</code>",
+                      parse_mode=ParseMode.HTML
+                  )
+          return
+'''
+          new = '''    if text == "очко" or text == "21" or text.startswith("очко ") or text.startswith("21 "):
+          parts_o = raw.split()
+          if len(parts_o) >= 2:
+              bet = parse_bet(parts_o[1], user["balance"])
+              if bet > 0:
+                  await handle_ochko_start(update, user, bet)
+              else:
+                  await update.message.reply_text(
+                      f"🥶 {user_link(uid, user['username'])}, ты ввел что-то неправильно!\\n"
+                      f"<code>·····················</code>\\n"
+                      f"<u>♠️ 21/очко <b>[ставка]</b></u>",
+                      parse_mode=ParseMode.HTML
+                  )
+          else:
+              await update.message.reply_text(
+                  f"🥶 {user_link(uid, user['username'])}, ты ввел что-то неправильно!\\n"
+                  f"<code>·····················</code>\\n"
+                  f"<u>♠️ 21/очко <b>[ставка]</b></u>",
+                  parse_mode=ParseMode.HTML
+              )
+          return
+'''
+          if old not in s:
+              raise SystemExit('21 block not found')
+          s = s.replace(old, new, 1)
+
+          # Standard short error for games when no/invalid bet is supplied.
+          def err(command):
+              return (
+                  f'🥶 {user_link(uid, user["username"])}, ты ввел что-то неправильно!\\n'
+                  f'<code>·····················</code>\\n'
+                  f'<u>🎮 {command} <b>[ставка]</b></u>'
+              )
+
+          replacements = {
+              'Пример: <code>Казино [ставка]</code>': None,
+              'Пример: <code>Спин [ставка]</code>': None,
+              'Пример: <code>Рулетка [число/красное/чётное/1-12] [ставка]</code>': None,
+              'Пример: <code>Кубик [число 1-6] [ставка]</code>': None,
+              'Пример: <code>Стаканчик [1, 2 или 3]</code>': None,
+              'Пример: <code>Орёл [ставка]</code> или <code>Решка [ставка]</code>': None,
+              'Пример: <code>Боулинг [ставка]</code>': None,
+              'Пример: <code>Дартс [ставка]</code>': None,
+          }
+          for old_text in replacements:
+              command = re.search(r'<code>(.*?)</code>', old_text).group(1)
+              command = command.split(' [')[0]
+              if command == 'Орёл':
+                  command = 'орёл/решка'
+              s = s.replace(old_text, err(command), 1)
+
+          # Basketball has a custom requested format.
+          s = s.replace(
+              'f"<u>♠️ 21/очко <b>[ставка]</b></u>"',
+              'f"<u>🏀 баскетбол/бс <b>[ставка]</b></u>"',
+              1
+          )
+
+          # Keep the result messages short: nickname -> rolled value -> win/loss.
+          bowling_pattern = re.compile(r'''        await update\.message\.reply_text\(\n            f"🎳 \{user_link\(uid, user\['username'\]\)\}, \{desc\}\\n"\n            f"· · · · · · · · · · · · · · ·\\n"\n            f"💸 Ставка: \{fmt_smart\(bet\)\} кр\.\\n"\n            \+ \(f"🎉 Выигрыш: \{fmt_smart\(win\)\} кр\." if change > 0 else f"📊 Итог: \{sign\}\{fmt_smart\(change\)\} кр\."\),\n            parse_mode=ParseMode\.HTML\n        \)''')
+          bowling_new = '''        result_text = f"✅ Твой выигрыш составил <b>{fmt_smart(change)}</b> кр.!" if change > 0 else "🛑 Ты проиграл(-а)! Попытай удачу в следующий раз 😣"
+        await update.message.reply_text(
+            f"{user_link(uid, user['username'])}\\n🎳 Выпало - {pins}\\n{result_text}",
+            parse_mode=ParseMode.HTML
+        )'''
+          s, n = bowling_pattern.subn(bowling_new, s, count=1)
+          if n != 1:
+              raise SystemExit('bowling output block not found')
+
+          basketball_pattern = re.compile(r'''        await update\.message\.reply_text\(\n            f"🏀 \{user_link\(uid, user\['username'\]\}, \{desc\}\\n"\n            f"· · · · · · · · · · · · · · ·\\n"\n            f"💸 Ставка: \{fmt_smart\(bet\)\} кр\.\\n"\n            \+ \(f"🎉 Выигрыш: \{fmt_smart\(win\)\} кр\." if change > 0 else f"📊 Итог: \{sign\}\{fmt_smart\(change\)\} кр\."\),\n            parse_mode=ParseMode\.HTML\n        \)''')
+          basketball_new = '''        result_text = f"✅ Твой выигрыш составил <b>{fmt_smart(change)}</b> кр.!" if change > 0 else "🛑 Ты проиграл(-а)! Попытай удачу в следующий раз 😣"
+        await update.message.reply_text(
+            f"{user_link(uid, user['username'])}\\n🏀 Выпало - {roll}\\n{result_text}",
+            parse_mode=ParseMode.HTML
+        )'''
+          s, n = basketball_pattern.subn(basketball_new, s, count=1)
+          if n != 1:
+              raise SystemExit('basketball output block not found')
+
+          darts_pattern = re.compile(r'''        await update\.message\.reply_text\(\n            f"🎯 \{user_link\(uid, user\['username'\]\)\}, \{desc\}\\n"\n            f"· · · · · · · · · · · · · · ·\\n"\n            f"💸 Ставка: \{fmt_smart\(bet\)\} кр\.\\n"\n            f"\{result_line\}",\n            parse_mode=ParseMode\.HTML\n        \)''')
+          darts_new = '''        result_text = f"✅ Твой выигрыш составил <b>{fmt_smart(change)}</b> кр.!" if change > 0 else "🛑 Ты проиграл(-а)! Попытай удачу в следующий раз 😣"
+        await update.message.reply_text(
+            f"{user_link(uid, user['username'])}\\n🎯 Выпало - {roll}\\n{result_text}",
+            parse_mode=ParseMode.HTML
+        )'''
+          s, n = darts_pattern.subn(darts_new, s, count=1)
+          if n != 1:
+              raise SystemExit('darts output block not found')
+
+          p.write_text(s, encoding='utf-8')
+          PY
+          python3 -m py_compile бот.py
+
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add бот.py
+          git diff --cached --quiet && exit 0
+          git commit -m "fix: simplify game messages and 21 command"
+          git push
