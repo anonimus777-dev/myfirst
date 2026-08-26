@@ -1622,7 +1622,8 @@ async def main():
     app.add_handler(CommandHandler("top", cmd_top_slash))
     app.add_handler(CommandHandler("cases", cmd_cases_slash))
     app.add_handler(CommandHandler("rating", cmd_rating_slash))
-    app.add_handler(CallbackQueryHandler(handle_callback))
+    # ИСКЛЮЧАЕМ cs_* из этого обработчика
+    app.add_handler(CallbackQueryHandler(handle_callback, pattern="^(?!cs_)"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     register_codespace_handlers(app)
