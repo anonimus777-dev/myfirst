@@ -1,98 +1,71 @@
-name: Fix games runtime
+name: Fix games
 on:
   push:
     branches: [main]
 
+permissions:
+  contents: write
+
 jobs:
   fix:
-    if: github.event.head_commit.message != 'Fix roulette and dice runtime error'
+    if: github.event.head_commit.message != 'fix: apply game aliases'
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Fix roulette and dice blocks
+      - name: Patch bot.py
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          import re
+
           p = Path('бот.py')
           s = p.read_text(encoding='utf-8')
-          roulette = '''    # Рулетка
-    if text.startswith("рулетка"):
-        parts_g = raw.split()
-        if len(parts_g) < 3:
-            await update.message.reply_text(f"Пример: <code>Рулетка [ставка] [красное/черное]</code>", parse_mode=ParseMode.HTML)
-            return
-        cd = check_cooldown(uid)
-        if cd:
-            await update.message.reply_text(f"⏳ Подождите {cd} сек.")
-            return
-        bet = parse_bet(parts_g[1], user["balance"])
-        if bet <= 0 or user["balance"] < bet:
-            await update.message.reply_text(f"{user_link(uid, user['username'])}, недостаточно крышек!", parse_mode=ParseMode.HTML)
-            return
-        choice = parts_g[2].lower()
-        if choice in ("красное", "красный", "красная", "red", "🔴"):
-            choice = "red"
-        elif choice in ("черное", "чёрное", "черный", "чёрный", "black", "⚫️"):
-            choice = "black"
-        elif choice in ("зеленое", "зелёное", "зелёный", "зеленый", "green", "🟢"):
-            choice = "green"
-        elif choice.isdigit() and 0 <= int(choice) <= 36:
-            choice = int(choice)
-        else:
-            await update.message.reply_text("Выбери: красное, черное, зеленое или число 0-36.")
-            return
-        num = random.randint(0, 36)
-        color = "🟢" if num == 0 else ("🔴" if num in red_nums else "⚫️")
-        actual = "green" if num == 0 else ("red" if num in red_nums else "black")
-        won = (choice == actual) or (isinstance(choice, int) and choice == num)
-        win = bet * 2 if won else 0
-        change = win - bet
-        async with aiosqlite.connect(DB_PATH) as db:
-            await db.execute("UPDATE users SET balance = balance - ? + ? WHERE user_id=?", (bet, win, uid))
-            await db.commit()
-        set_cooldown(uid)
-        result_text = f"✅ Твой выигрыш составил <b>{fmt_smart(change)}</b> кр.!" if won else "🛑 Ты проиграл(-а)! Попытай удачу в следующий раз 😣"
-        await update.message.reply_text(f"{user_link(uid, user['username'])}\\n🖲 Выпало - {num} {color}\\n{result_text}", parse_mode=ParseMode.HTML)
-        return
 
-'''
-          dice = '''    # Кубик
-    if text.startswith("кубик"):
-        parts_g = raw.split()
-        if len(parts_g) < 3 or not parts_g[1].isdigit() or not parts_g[2].isdigit() or not 1 <= int(parts_g[2]) <= 6:
-            await update.message.reply_text("Пример: <code>Кубик [ставка] [1-6]</code>", parse_mode=ParseMode.HTML)
-            return
-        cd = check_cooldown(uid)
-        if cd:
-            await update.message.reply_text(f"⏳ Подождите {cd} сек.")
-            return
-        bet = parse_bet(parts_g[1], user["balance"])
-        if bet <= 0 or user["balance"] < bet:
-            await update.message.reply_text(f"{user_link(uid, user['username'])}, недостаточно крышек!", parse_mode=ParseMode.HTML)
-            return
-        guess = int(parts_g[2])
-        set_cooldown(uid)
-        dice_msg = await update.message.reply_dice(emoji="🎲")
-        await asyncio.sleep(3)
-        rolled = dice_msg.dice.value
-        won = rolled == guess
-        win = bet * 6 if won else 0
-        change = win - bet
-        async with aiosqlite.connect(DB_PATH) as db:
-            await db.execute("UPDATE users SET balance = balance - ? + ? WHERE user_id=?", (bet, win, uid))
-            await db.commit()
-        result_text = f"✅ Твой выигрыш составил <b>{fmt_smart(change)}</b> кр.!" if won else "🛑 Ты проиграл(-а)! Попытай удачу в следующий раз 😣"
-        await update.message.reply_text(f"{user_link(uid, user['username'])}\\n🎲 Выпало - {rolled}\\n{result_text}", parse_mode=ParseMode.HTML)
-        return
+          old = '    if text.startswith("очко ") or text.startswith("21 "):\n'
+          new = '''    if text == "очко" or text == "21":
+          await update.message.reply_text(
+              f"🥶 {user_link(uid, user['username'])}, ты ввел что-то неправильно!\\n"
+              f"<code>·····················</code>\\n"
+              f"<u>♠️ 21/очко <b>[ставка]</b></u>",
+              parse_mode=ParseMode.HTML
+          )
+          return
 
+      if text.startswith("очко ") or text.startswith("21 "):\n'''
+          if old not in s:
+              raise SystemExit('Не найден обработчик очко/21')
+          s = s.replace(old, new, 1)
+
+          replacements = {
+              '    if text.startswith("боулинг"):\n': '    if text == "боулинг" or text == "бо" or text.startswith("боулинг ") or text.startswith("бо "):\n',
+              '    if text.startswith("баскетбол"):\n': '    if text == "баскетбол" or text == "бс" or text.startswith("баскетбол ") or text.startswith("бс "):\n',
+              '    if text.startswith("дартс"):\n': '    if text == "дартс" or text == "дс" or text.startswith("дартс ") or text.startswith("дс "):\n',
+          }
+          for old, new in replacements.items():
+              if old not in s:
+                  raise SystemExit(f'Не найдено: {old!r}')
+              s = s.replace(old, new, 1)
+
+          old = '''    if text == "баскетбол" or text == "бс" or text.startswith("баскетбол ") or text.startswith("бс "):
+          parts_g = raw.split()
+          if len(parts_g) < 2:
+              await update.message.reply_text(f"Пример: <code>Баскетбол [ставка]</code>", parse_mode=ParseMode.HTML)
+              return
 '''
-          s, n1 = re.subn(r'    # Рулетка\n    if text\.startswith\("рулетка"\):.*?(?=    # Кубик\n)', roulette, s, flags=re.S)
-          if n1 != 1: raise SystemExit(f'roulette block matches: {n1}')
-          s, n2 = re.subn(r'    # Кубик\n    if text\.startswith\("кубик"\):.*?(?=    # Стаканчик\n)', dice, s, flags=re.S)
-          if n2 != 1: raise SystemExit(f'dice block matches: {n2}')
+          new = '''    if text == "баскетбол" or text == "бс" or text.startswith("баскетбол ") or text.startswith("бс "):
+          parts_g = raw.split()
+          if len(parts_g) < 2:
+              await update.message.reply_text(
+                  f"🥶 {user_link(uid, user['username'])}, ты ввел что-то неправильно!\\n"
+                  f"<code>·····················</code>\\n"
+                  f"<u>♠️ 21/очко <b>[ставка]</b></u>",
+                  parse_mode=ParseMode.HTML
+              )
+              return
+'''
+          if old not in s:
+              raise SystemExit('Не найден блок баскетбола')
+          s = s.replace(old, new, 1)
+
           p.write_text(s, encoding='utf-8')
           PY
       - name: Validate and commit
@@ -101,8 +74,6 @@ jobs:
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add бот.py
-          git commit -m "Fix roulette and dice runtime error"
-          git push
-          git rm .github/workflows/fix_games_now.yml
-          git commit -m "Remove temporary games fix workflow"
+          git rm .github/workflows/fix_games_now.yml .github/workflows/fix_game_aliases.yml
+          git commit -m 'fix: apply game aliases'
           git push
