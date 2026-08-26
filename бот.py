@@ -55,7 +55,6 @@ from сервисы.экономика import (
 )
 from сервисы.комнаты import cmd_room, cmd_rooms_list, cmd_let_in, cmd_buy_room, cmd_rooms_command
 from сервисы.пользователи import cmd_start, cmd_help, cmd_bunker, handle_top, cmd_top_slash
-from сервисы.codespace_manager import register_codespace_handlers
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     raw = update.message.text.strip()
@@ -1622,11 +1621,8 @@ async def main():
     app.add_handler(CommandHandler("top", cmd_top_slash))
     app.add_handler(CommandHandler("cases", cmd_cases_slash))
     app.add_handler(CommandHandler("rating", cmd_rating_slash))
-    # ИСКЛЮЧАЕМ cs_* из этого обработчика
-    app.add_handler(CallbackQueryHandler(handle_callback, pattern="^(?!cs_)"))
+    app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
-    register_codespace_handlers(app)
 
     job_queue = app.job_queue
     job_queue.run_repeating(queue_refill_job, interval=1800, first=60)
