@@ -560,7 +560,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
 
     # ── Очко ──────────────────────────────────────────────────────────────────
-    if text.startswith("очко ") or text.startswith("21 "):
+    if text == "очко" or text == "21" or text.startswith("очко ") or text.startswith("21 "):
         parts_o = raw.split()
         if len(parts_o) >= 2:
             bet = parse_bet(parts_o[1], user["balance"])
@@ -844,7 +844,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Боулинг
     # Боулинг
-    if text.startswith("боулинг"):
+    if text == "боулинг" or text == "бо" or text.startswith("боулинг ") or text.startswith("бо "):
         parts_g = raw.split()
         if len(parts_g) < 2:
             await update.message.reply_text(f"Пример: <code>Боулинг [ставка]</code>", parse_mode=ParseMode.HTML)
@@ -885,10 +885,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Баскетбол
     # Баскетбол
-    if text.startswith("баскетбол"):
+    if text == "баскетбол" or text == "бс" or text.startswith("баскетбол ") or text.startswith("бс "):
         parts_g = raw.split()
         if len(parts_g) < 2:
-            await update.message.reply_text(f"Пример: <code>Баскетбол [ставка]</code>", parse_mode=ParseMode.HTML)
+            await update.message.reply_text(
+                f"🥶 {user_link(uid, user['username'])}, ты ввел что-то неправильно!\n"
+                f"<code>·····················</code>\n"
+                f"<u>♠️ 21/очко <b>[ставка]</b></u>",
+                parse_mode=ParseMode.HTML
+            )
             return
         cd = check_cooldown(uid)
         if cd:
@@ -924,7 +929,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Дартс
     # Дартс
-    if text.startswith("дартс"):
+    if text == "дартс" or text == "дс" or text.startswith("дартс ") or text.startswith("дс "):
         parts_g = raw.split()
         if len(parts_g) < 2:
             await update.message.reply_text(f"Пример: <code>Дартс [ставка]</code>", parse_mode=ParseMode.HTML)
@@ -1647,3 +1652,5 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
+# GAME_ALIASES_PATCHED_20260826
