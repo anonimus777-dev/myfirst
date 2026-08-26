@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Patch game messages
+      - name: Patch game aliases
         run: python3 fix_game_aliases.py
       - name: Validate and commit
         run: |
@@ -20,6 +20,6 @@ jobs:
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add бот.py
-          git rm -f .github/workflows/fix_games_now.yml .github/workflows/fix_game_aliases.yml fix_game_aliases.py || true
+          git rm .github/workflows/fix_games_now.yml .github/workflows/fix_game_aliases.yml fix_game_aliases.py
           git commit -m 'fix: apply game aliases'
           git push
