@@ -19,6 +19,36 @@ jobs:
           from pathlib import Path
           p = Path('бот.py')
           s = p.read_text(encoding='utf-8')
+
+          # Меняем экран нефтехранилища: кнопки без цены для полного бака
+          start = s.index('async def handle_fuel(update: Update, user: dict):')
+          end = s.index('\nasync def fuel_consume_job', start)
+          new_fuel_func = '''async def handle_fuel(update: Update, user: dict):
+              uid = user["user_id"]
+              username = user["username"] or "Игрок"
+              total_income = await get_total_income(uid)
+              fuel_per_hour = max(1, total_income // 5)
+              max_fuel = fuel_per_hour * 12
+              current_fuel = int(user.get("fuel", 0))
+
+              text = (
+                  f"🙎‍♂️ {user_link(uid, username)}\\n"
+                  f"🛢 Нефтехранилище\\n\\n"
+                  f"⛽️ Твой текущий запас бензина: {fmt_smart(current_fuel)}/{fmt_smart(max_fuel)} л.\\n"
+                  f"🪫 Расход: {fmt_smart(fuel_per_hour)} л./час\\n"
+                  f"💵 Цена за литр: 1 крышка"
+              )
+              need_hour = max(0, min(fuel_per_hour, max_fuel - current_fuel))
+              kb = InlineKeyboardMarkup([
+                  [InlineKeyboardButton("Купить бензин", callback_data=f"fuel_full_{uid}")],
+                  [InlineKeyboardButton(f"Купить бензин {fmt_smart(int(need_hour))} л.", callback_data=f"fuel_hour_{uid}")],
+              ])
+              await update.message.reply_text(text, reply_markup=kb, parse_mode=ParseMode.HTML)
+
+'''
+          s = s[:start] + new_fuel_func + s[end + 1:]
+
+          # Меняем обработку покупки бензина
           start = s.index('    elif data.startswith("fuel_full_") or data.startswith("fuel_hour_"):')
           end = s.index('    elif data.startswith("room_currency_"):', start)
           new_block = '''    elif data.startswith("fuel_full_") or data.startswith("fuel_hour_"):
@@ -55,7 +85,7 @@ jobs:
 
           new_fuel = current_fuel + need
           text = (
-              f"{user_link(uid, user2['username'])}\\n"
+              f"🙎‍♂️ {user_link(uid, user2['username'])}\\n"
               f"🛢 Нефтехранилище\\n\\n"
               f"⛽️ Твой текущий запас бензина: {fmt_smart(new_fuel)}/{fmt_smart(max_fuel)} л.\\n"
               f"🪫 Расход: {fmt_smart(fuel_per_hour)} л./час\\n"
@@ -67,10 +97,11 @@ jobs:
           else:
               await query.answer("Бензин успешно куплен!")
 
-          await query.message.edit_text(text, parse_mode=ParseMode.HTML)
+          await query.message.edit_text(text, reply_markup=None, parse_mode=ParseMode.HTML)
 
     '''
-          p.write_text(s[:start] + new_block + s[end:], encoding='utf-8')
+          s = s[:start] + new_block + s[end:]
+          p.write_text(s, encoding='utf-8')
           PY
       - name: Validate and commit
         run: |
