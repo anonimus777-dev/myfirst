@@ -15,136 +15,76 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
+
           p = Path('бот.py')
           s = p.read_text(encoding='utf-8')
 
-          games = {
-              'казино': ('🎱', 'mult', 'result_line'),
-              'спин': ('🎰', 'reel', 'desc'),
-              'рулетка': ('🖲', 'num', 'desc'),
-              'кубик': ('🎲', 'rolled', 'desc'),
-              'стаканчик': ('🥛', 'correct', 'desc'),
-              'орёл': ('🪙', 'result', 'desc'),
-              'боулинг': ('🎳', 'pins', 'desc'),
-              'баскетбол': ('🏀', 'roll', 'desc'),
-              'дартс': ('🎯', 'roll', 'desc'),
+          # Унифицированное сообщение при запуске игры без ставки.
+          # Формат: имя игрока + разделитель + правильный синтаксис команды.
+          game_help = {
+              'казино': '🎱 казино <b>[ставка]</b>',
+              'спин': '🎰 спин <b>[ставка]</b>',
+              'рулетка': '🖲 рулетка <b>[число/красное/чёрное/чётное/нечётное/1-12] [ставка]</b>',
+              'кубик': '🎲 кубик <b>[число 1-6] [ставка]</b>',
+              'стаканчик': '🥛 стаканчик <b>[1/2/3] [ставка]</b>',
+              'орёл': '🪙 орёл/решка <b>[ставка]</b>',
+              'боулинг': '🎳 боулинг/бо <b>[ставка]</b>',
+              'баскетбол': '🏀 баскетбол/бс <b>[ставка]</b>',
+              'дартс': '🎯 дартс/дс <b>[ставка]</b>',
+              'очко': '♠️ 21/очко <b>[ставка]</b>',
           }
 
-          def block_for(marker):
-              start = s.find(marker)
+          def game_block(start_marker):
+              start = s.find(start_marker)
               if start < 0:
                   return None
-              end = s.find('\n    # ', start + len(marker))
+              end = s.find('\n    # ', start + len(start_marker))
               if end < 0:
                   end = len(s)
               return start, end
 
-          def replace_last_reply(block, replacement):
-              pos = block.rfind('        await update.message.reply_text(')
-              if pos < 0:
+          def replace_first_reply_in_missing_bet(block, help_line):
+              # Ищем ветку len(parts...) < N, которая сообщает пример команды.
+              m = re.search(r'(        if len\(parts_g\) < \d+[^:]*:\n)(.*?)(        return\n)', block, re.S)
+              if not m:
                   return block, False
-              depth = 0
-              in_str = False
-              quote = ''
-              escape = False
-              end = None
-              for i in range(pos, len(block)):
-                  c = block[i]
-                  if in_str:
-                      if escape:
-                          escape = False
-                      elif c == '\\':
-                          escape = True
-                      elif c == quote:
-                          in_str = False
-                  else:
-                      if c in ('"', "'"):
-                          in_str = True
-                          quote = c
-                      elif c == '(':
-                          depth += 1
-                      elif c == ')':
-                          depth -= 1
-                          if depth == 0:
-                              end = i + 1
-                              break
-              if end is None:
+              body = m.group(2)
+              if 'await update.message.reply_text' not in body:
                   return block, False
-              return block[:pos] + replacement + block[end:], True
-
-          def compact_message(emoji, result_expr, win_condition):
-              return (
-                  '        result_text = '
-                  f'f"<b>{{safe_nick(user[\'username\'])}}</b>\\n{emoji} Выпало - {{{result_expr}}}\\n'
-                  f'{{\"<b>Твой выигрыш составил {fmt_smart(change)} кр.!</b>\" if {win_condition} else \"🛑 Ты проиграл(-а)! Попытай удачу в следующий раз 😣\"}}"\n'
-                  '        await update.message.reply_text(result_text, parse_mode=ParseMode.HTML)'
+              replacement = (
+                  '        await update.message.reply_text(\n'
+                  f'            f"🥶 {{user_link(uid, user[\'username\'])}}, ты ввел что-то неправильно!\\n"\n'
+                  '            f"<code>·····················</code>\\n"\n'
+                  f'            f"<u>{help_line}</u>",\n'
+                  '            parse_mode=ParseMode.HTML\n'
+                  '        )\n'
               )
+              new_body = replacement
+              return block[:m.start(2)] + new_body + block[m.end(2):], True
 
-          # Compact the games the user asked about. This replaces the final result message only;
-          # the actual game result/economy logic remains untouched.
-          targets = {
-              '    if text.startswith("рулетка")': ('🖲', 'num', 'change > 0'),
-              '    if text.startswith("кубик")': ('🎲', 'rolled', 'change > 0'),
-              '    if text.startswith("боулинг")': ('🎳', 'pins', 'change > 0'),
-              '    if text.startswith("баскетбол")': ('🏀', 'roll', 'change > 0'),
-              '    if text.startswith("дартс")': ('🎯', 'roll', 'change > 0'),
-          }
+          targets = [
+              ('    if text.startswith("казино"):', 'казино'),
+              ('    if text.startswith("спин"):', 'спин'),
+              ('    if text.startswith("рулетка"):', 'рулетка'),
+              ('    if text.startswith("кубик"):', 'кубик'),
+              ('    if text.startswith("стаканчик"):', 'стаканчик'),
+              ('    if text.startswith("орёл")', 'орёл'),
+              ('    if text == "боулинг" or text == "бо"', 'боулинг'),
+              ('    if text == "баскетбол" or text == "бс"', 'баскетбол'),
+              ('    if text == "дартс" or text == "дс"', 'дартс'),
+              ('    if text == "очко" or text == "21"', 'очко'),
+          ]
 
-          for marker, (emoji, result_expr, win_condition) in targets.items():
-              got = block_for(marker)
+          for marker, name in targets:
+              got = game_block(marker)
               if not got:
                   continue
               start, end = got
               block = s[start:end]
-              block, changed = replace_last_reply(block, compact_message(emoji, result_expr, win_condition))
+              block, changed = replace_first_reply_in_missing_bet(block, game_help[name])
               if changed:
                   s = s[:start] + block + s[end:]
-
-          # Add a 3-second cooldown to games that did not have one. Existing games
-          # already use check_cooldown/set_cooldown, so they are left unchanged.
-          missing = [
-              '    if text.startswith("спин"):',
-              '    if text.startswith("рулетка"):',
-              '    if text.startswith("кубик"):',
-              '    if text.startswith("стаканчик"):',
-              '    if text.startswith("орёл") or text.startswith("решка") or text.startswith("орел"):',
-          ]
-          for marker in missing:
-              got = block_for(marker)
-              if not got:
-                  continue
-              start, end = got
-              block = s[start:end]
-              if 'cd = check_cooldown(uid)' not in block:
-                  anchor = '        parts_g = raw.split()'
-                  at = block.find(anchor)
-                  if at >= 0:
-                      line_end = block.find('\n', at) + 1
-                      guard = ('        cd = check_cooldown(uid)\n'
-                               '        if cd:\n'
-                               '            await update.message.reply_text(f"⏳ Подождите {cd} сек.")\n'
-                               '            return\n')
-                      block = block[:line_end] + guard + block[line_end:]
-              # Consume cooldown only after a valid bet, immediately before the random/dice result.
-              if 'set_cooldown(uid)' not in block:
-                  anchors = ['        dice_msg = ', '        rolled = ', '        num = ',
-                             '        reel = ', '        correct = ', '        result = random.']
-                  at = -1
-                  for anchor in anchors:
-                      q = block.find(anchor)
-                      if q >= 0 and (at < 0 or q < at):
-                          at = q
-                  if at >= 0:
-                      block = block[:at] + '        set_cooldown(uid)\n' + block[at:]
-              s = s[:start] + block + s[end:]
-
-          # Ensure the configured general game cooldown is 3 seconds.
-          settings = Path('настройки.py')
-          if settings.exists():
-              t = settings.read_text(encoding='utf-8')
-              import re
-              t = re.sub(r'(GAME_COOLDOWNS\s*=\s*\{[^}]*?)(\})', lambda m: m.group(1) + m.group(2), t, count=1, flags=re.S)
-              settings.write_text(t, encoding='utf-8')
 
           p.write_text(s, encoding='utf-8')
           PY
@@ -154,6 +94,6 @@ jobs:
         run: |
           git config user.name github-actions
           git config user.email github-actions@github.com
-          git add бот.py настройки.py
-          git diff --cached --quiet || git commit -m 'fix compact game results and 3s cooldowns'
+          git add бот.py
+          git diff --cached --quiet || git commit -m 'fix game command help format'
           git push
