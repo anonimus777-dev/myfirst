@@ -158,7 +158,7 @@ def gh_codespace_create(repo: str, token: str) -> Optional[str]:
     display_name = f"tg-manager-{unique_id}"
     success, stdout, stderr = run_gh_command(
         ["gh", "codespace", "create", "--repo", repo, "--display-name", display_name,
-         "--idle-timeout", IDLE_TIMEOUT, "--machine", "basic"],
+         "--idle-timeout", IDLE_TIMEOUT, "--machine", "basicLinux32gb"],
         token, timeout=300
     )
     if not success:
